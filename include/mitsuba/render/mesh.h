@@ -30,7 +30,8 @@ public:
     using InputVector3f = Vector<InputFloat, 3>;
     using InputNormal3f = Normal<InputFloat, 3>;
 
-    using FloatStorage = DynamicBuffer<dr::replace_scalar_t<Float, InputFloat>>;
+    using FloatStorage   = DynamicBuffer<dr::replace_scalar_t<Float, InputFloat>>;
+    using ScalarStorage  = DynamicBuffer<UInt32>;
 
     using typename Base::ScalarSize;
     using typename Base::ScalarIndex;

@@ -10,6 +10,8 @@ project(mitsuba
     CXX C
 )
 
+list(APPEND CMAKE_PREFIX_PATH "$ENV{SP_INSTALL_PREFIX}")
+
 # ----------------------------------------------------------
 #  Optional features available to users
 # ----------------------------------------------------------
@@ -45,6 +47,59 @@ option(MI_PROFILER_NVTX      "Forward profiler events (to NVIDIA Nsight)?" OFF)
 
 option(MI_STABLE_ABI "Build Python extension using the CPython stable ABI? (Only relevant when using scikit-build)" OFF)
 mark_as_advanced(MI_STABLE_ABI)
+
+# ----------------------------------------------------------
+#  External library overrides (SupportPackages integration)
+# ----------------------------------------------------------
+
+option(MI_EXTERNAL_PUGIXML "Use an external PugiXML" OFF)
+if(MI_EXTERNAL_PUGIXML)
+    find_package(pugixml REQUIRED)
+endif()
+
+option(MI_EXTERNAL_JPEG "Use an external libjpeg" OFF)
+if(MI_EXTERNAL_JPEG)
+    find_package(JPEG REQUIRED)
+    set(JPEG_DEFINES -DMI_HAS_LIBJPEG)
+    message(STATUS "Using external jpeg library")
+    message(STATUS "libjpeg libs: ${JPEG_LIBRARIES}")
+endif()
+
+option(MI_EXTERNAL_PNG "Use an external libpng" OFF)
+if(MI_EXTERNAL_PNG)
+    find_package(PNG REQUIRED)
+    set(PNG_DEFINES -DMI_HAS_LIBPNG)
+    message(STATUS "Using external png library")
+    message(STATUS "libpng libs: ${PNG_LIBRARIES}")
+endif()
+
+option(MI_EXTERNAL_TIFF "Use an external libtiff" ON)
+if(MI_EXTERNAL_TIFF)
+    find_package(TIFF REQUIRED)
+    set(TIFF_DEFINES -DMI_HAS_LIBTIFF)
+    message(STATUS "Using external tiff library")
+    message(STATUS "libtiff libs: ${TIFF_LIBRARIES}")
+endif()
+
+option(MI_EXTERNAL_EMBREE "Use an external Embree" OFF)
+if(MI_EXTERNAL_EMBREE)
+    find_package(embree 3 REQUIRED)
+    message(STATUS "Using external Embree library")
+    message(STATUS "Embree include dirs: ${EMBREE_INCLUDE_DIRS}")
+endif()
+
+option(MI_EXTERNAL_NANOBIND "Use an external nanobind" OFF)
+if(MI_EXTERNAL_NANOBIND)
+    find_package(nanobind REQUIRED)
+    message(STATUS "Using external nanobind")
+endif()
+
+option(MI_EXTERNAL_OPENEXR "Use an external OpenEXR" OFF)
+if(MI_EXTERNAL_OPENEXR)
+    find_package(OpenEXR REQUIRED)
+    message(STATUS "Using external OpenEXR")
+    message(STATUS "OpenEXR libs: ${OpenEXR_LIBRARIES}")
+endif()
 
 # ----------------------------------------------------------
 #  Check if submodules have been checked out, or fail early
@@ -427,9 +482,9 @@ function(add_plugin)
   )
   install(
     TARGETS ${TARGET}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_BINDIR}/plugins
-    LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}/plugins
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/plugins
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/mitsuba/plugins
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/mitsuba/plugins
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/mitsuba/plugins
   )
   list(APPEND MI_PLUGIN_TARGETS ${TARGET})
   set(MI_PLUGIN_TARGETS "${MI_PLUGIN_TARGETS}" PARENT_SCOPE)
@@ -494,19 +549,21 @@ if (MI_COPIED_CONFIG_FILE AND NOT SKBUILD)
 endif()
 
 # Installation targets
-set(MI_DEPEND
-  IlmImf IlmThread Imath Iex IexMath Half pugixml
-)
+if(MI_EXTERNAL_OPENEXR)
+  set(MI_DEPEND)
+else()
+  set(MI_DEPEND IlmImf IlmThread Imath Iex IexMath Half)
+endif()
 
 list(APPEND MI_DEPEND struct-jit)
 
-list(APPEND MI_DEPEND png jpeg)
+#list(APPEND MI_DEPEND png jpeg)
 
-if (WIN32)
-  list(APPEND MI_DEPEND zlib)
-endif()
+#if (WIN32)
+#  list(APPEND MI_DEPEND zlib)
+#endif()
 
-if (MI_ENABLE_EMBREE)
+if (MI_ENABLE_EMBREE AND NOT MI_EXTERNAL_EMBREE)
   list(APPEND MI_DEPEND embree)
 endif()
 

@@ -11,3 +11,11 @@ if (UNIX AND NOT APPLE)
 endif()
 
 set_target_properties(mitsuba-bin PROPERTIES OUTPUT_NAME mitsuba)
+
+target_compile_definitions(mitsuba-bin
+    PRIVATE
+        ADDITIONAL_PLUGIN_PATH=\"${CMAKE_INSTALL_LIBDIR}/mitsuba\")
+
+target_compile_definitions(mitsuba-bin
+    PRIVATE
+        ADDITIONAL_DATA_PATH=\"${CMAKE_INSTALL_FULL_DATAROOTDIR}/mitsuba\")

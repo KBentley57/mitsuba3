@@ -22,37 +22,22 @@ Blackbody spectrum (:monosp:`blackbody`)
    - Maximum wavelength of the spectral range in nanometers. (Default: 830nm)
 
  * - temperature
-   - |float|
-   - Black body temperature in Kelvins.
+   - |float| or |texture|
+   - Black body temperature in Kelvins. Can be a constant or a texture (e.g. bitmap).
    - |exposed|
 
-This is a black body radiation spectrum for a specified temperature
-And therefore takes a single :monosp:`float`-valued parameter :paramtype:`temperature` (in Kelvins).
+ * - temperature_attribute
+   - |string|
+   - Name of a per-vertex scalar attribute (e.g. from a PLY) to use as temperature in Kelvins.
+   - If specified, this bypasses the texture system and queries the shape attribute at the shading point.
 
-This is the only spectrum type that needs to be explicitly instantiated in its full XML description:
+ * - sampling_temperature
+   - |float|
+   - Temperature (Kelvins) used to construct the spectral sampling distribution (PDF/CDF) and related
+   - quantities like :monosp:`max()`. This is intentionally decoupled from spatial temperature variation.
+   - Default: if :monosp:`temperature` is provided as a constant, that value; otherwise 300 K.
 
-.. tabs::
-    .. code-tab:: xml
-        :name: blackbody
-
-        <shape type=".. shape type ..">
-            <emitter type="area">
-                <spectrum type="blackbody" name="radiance">
-                    <float name="temperature" value="5000"/>
-                </spectrum>
-            </emitter>
-        </shape>
-
-    .. code-tab:: python
-
-        'type': '.. shape type ..',
-        'emitter': {
-            'type': 'area',
-            'radiance': {
-                'type': 'blackbody',
-                'temperature': 5000
-            }
-        }
+This is a black body radiation spectrum for a specified temperature.
 
 This spectrum type only makes sense for specifying emission and is unavailable
 in non-spectral rendering modes.
@@ -81,16 +66,46 @@ public:
     constexpr static ScalarFloat c1 = h * c / k;
 
     BlackBodySpectrum(const Properties &props) : Texture(props) {
-        m_temperature = props.get<ScalarFloat>("temperature");
         m_wavelength_range = ScalarVector2f(
             props.get<ScalarFloat>("wavelength_min", MI_CIE_MIN),
             props.get<ScalarFloat>("wavelength_max", MI_CIE_MAX)
         );
+
+        m_use_attribute = props.has_property("temperature_attribute");
+        if (m_use_attribute) {
+            m_temperature_attribute = props.get<std::string>("temperature_attribute");
+
+            // Default sampling temperature when using spatially varying attribute
+            m_sampling_temperature =
+                props.get<ScalarFloat>("sampling_temperature", ScalarFloat(300.0));
+        } else {
+            // Default base temperature if not specified, or specified as a texture object
+            ScalarFloat default_temp = ScalarFloat(300.0);
+
+            // Only read "temperature" as a scalar if it is a scalar
+            if (props.has_property("temperature") &&
+                props.type("temperature") == Properties::Type::Float) {
+                default_temp = props.get<ScalarFloat>("temperature");
+            }
+
+            // This accepts either a float (constant texture) or a texture object (bitmap/etc.)
+            m_temperature_tex = props.get_texture<Texture>("temperature", default_temp);
+
+            // Default sampling temp: use provided scalar temperature if present, else 300 K
+            m_sampling_temperature =
+                props.get<ScalarFloat>("sampling_temperature", default_temp);
+        }
+
         parameters_changed();
     }
 
-    void traverse(TraversalCallback *cb) override {
-        cb->put("temperature", m_temperature, ParamFlags::NonDifferentiable);
+    void traverse(TraversalCallback *callback) override {
+        // Only expose the temperature object when it is texture-backed.
+        if (!m_use_attribute)
+            callback->put("temperature", m_temperature_tex, ParamFlags::Differentiable);
+
+        callback->put("sampling_temperature", m_sampling_temperature,
+                      ParamFlags::NonDifferentiable);
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
@@ -98,7 +113,10 @@ public:
         m_integral = cdf_and_pdf(ScalarFloat(m_wavelength_range.y())).first - m_integral_min;
     }
 
-    UnpolarizedSpectrum eval_impl(const Wavelength &wavelengths, Mask active_) const {
+    /// Evaluate Planck's law for the provided temperature (Kelvins).
+    UnpolarizedSpectrum eval_impl(const Wavelength &wavelengths,
+                                  UnpolarizedSpectrum temp_K,
+                                  Mask active_) const {
         if constexpr (is_spectral_v<Spectrum>) {
             /* The scale factors of 1e-9f are needed to perform a conversion between
                densities per unit nanometer and per unit meter. */
@@ -110,24 +128,51 @@ public:
             active &= wavelengths >= m_wavelength_range.x()
                    && wavelengths <= m_wavelength_range.y();
 
+            // Avoid pathological values (<= 0 K) producing NaNs/Infs
+            temp_K = dr::maximum(temp_K, UnpolarizedSpectrum(Float(1e-3f)));
+
             /* Watts per unit surface area (m^-2)
                      per unit wavelength (nm^-1)
                      per unit steradian (sr^-1) */
             UnpolarizedSpectrum P = 1e-9f * c0 / (lambda5 *
-                    (dr::exp(c1 / (lambda * m_temperature)) - 1.f));
+                    (dr::exp(c1 / (lambda * temp_K)) - 1.f));
 
             return P & active;
         } else {
             DRJIT_MARK_USED(wavelengths);
+            DRJIT_MARK_USED(temp_K);
             DRJIT_MARK_USED(active_);
-            /// TODO : implement reasonable thing to do in mono/RGB mode
             Throw("Not implemented for non-spectral modes");
+        }
+    }
+
+    /// Compute the temperature at the shading point as an UnpolarizedSpectrum (broadcast).
+    UnpolarizedSpectrum temperature_at_si(const SurfaceInteraction3f &si,
+                                      Mask active) const {
+        if (!m_use_attribute) {
+            // Texture path (constant/bitmap/etc.) -> MUST be scalar temperature
+            Float t = m_temperature_tex->eval_1(si, active);
+            return UnpolarizedSpectrum(t);
+        }
+
+        // Attribute path ...
+        if constexpr (dr::is_jit_v<Float>) {
+            Mask valid = active && si.is_valid();
+            Float t = si.shape->eval_attribute_1(m_temperature_attribute, si, valid);
+            return UnpolarizedSpectrum(t);
+        } else {
+            if (!active || !si.is_valid() || !si.shape)
+                return dr::zeros<UnpolarizedSpectrum>();
+            Float t = si.shape->eval_attribute_1(m_temperature_attribute, si, active);
+            return UnpolarizedSpectrum(t);
         }
     }
 
     UnpolarizedSpectrum eval(const SurfaceInteraction3f &si, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
-        return eval_impl(si.wavelengths, active);
+
+        UnpolarizedSpectrum temp_K = temperature_at_si(si, active);
+        return eval_impl(si.wavelengths, temp_K, active);
     }
 
     Wavelength pdf_spectrum(const SurfaceInteraction3f &si, Mask active_) const override {
@@ -140,14 +185,15 @@ public:
             active &= si.wavelengths >= m_wavelength_range.x()
                    && si.wavelengths <= m_wavelength_range.y();
 
-            // Wien's approximation to Planck's law
-            Wavelength pdf = 1e-9f * c0 * dr::exp(-c1 / (lambda * m_temperature))
+            // Wien's approximation to Planck's law, using sampling temperature
+            ScalarFloat K = m_sampling_temperature;
+            Wavelength pdf = 1e-9f * c0 * dr::exp(-c1 / (lambda * K))
                 / (lambda5 * m_integral);
 
             return pdf & active;
         } else {
+            DRJIT_MARK_USED(si);
             DRJIT_MARK_USED(active_);
-            /// TODO : implement reasonable thing to do in mono/RGB mode
             Throw("Not implemented for non-spectral modes");
         }
     }
@@ -158,9 +204,10 @@ public:
               c1_3 = c1_2 * c1,
               c1_4 = dr::square(c1_2);
 
-        const Value K  = m_temperature,
+        // Use sampling temperature for sampling distribution math
+        const Value K  = Value(m_sampling_temperature),
                     K2 = dr::square(K),
-                    K3 = K2*K;
+                    K3 = K2 * K;
 
         lambda *= 1e-9f;
 
@@ -212,7 +259,6 @@ public:
                 // Update which lanes are still active
                 active = active && (dr::abs(value) > eps_value) && (b - a > eps_domain);
 
-                // Stop the iteration if converged
                 if (dr::none_nested(active))
                     break;
 
@@ -227,7 +273,12 @@ public:
 
             Wavelength pdf = deriv / m_integral;
 
-            return { t, eval_impl(t, active_) / pdf };
+            // eval_impl(t, ...) uses sampling temperature when called through the overload below,
+            // so we directly evaluate at t using sampling temperature here.
+            UnpolarizedSpectrum temp_K = UnpolarizedSpectrum(Float(m_sampling_temperature));
+            UnpolarizedSpectrum val = eval_impl(t, temp_K, active_);
+
+            return { t, val / pdf };
         } else {
             DRJIT_MARK_USED(sample_);
             Throw("Not implemented for non-spectral modes");
@@ -247,14 +298,15 @@ public:
     }
 
     ScalarFloat max() const override {
-        ScalarFloat lambda_peak = dr::clip(b / m_temperature, 
-                                            m_wavelength_range.x() * 1e-9f, 
-                                            m_wavelength_range.y() * 1e-9f),
+        // Peak wavelength using sampling temperature
+        ScalarFloat lambda_peak = dr::clip(b / m_sampling_temperature,
+                                           m_wavelength_range.x() * 1e-9f,
+                                           m_wavelength_range.y() * 1e-9f),
                     lambda2_peak = dr::square(lambda_peak),
                     lambda5_peak = dr::square(lambda2_peak) * lambda_peak;
 
         ScalarFloat P = 1e-9f * c0 / (lambda5_peak *
-                    (dr::exp(c1 / (lambda_peak * m_temperature)) - 1.f));
+                    (dr::exp(c1 / (lambda_peak * m_sampling_temperature)) - 1.f));
 
         return P;
     }
@@ -262,19 +314,37 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "BlackBodySpectrum[" << std::endl
-            << "  temperature = " << string::indent(m_temperature) << std::endl
-            << "]";
+            << "  wavelength_range = [" << m_wavelength_range.x()
+            << ", " << m_wavelength_range.y() << "]," << std::endl
+            << "  sampling_temperature = " << m_sampling_temperature << "," << std::endl;
+
+        if (m_use_attribute) {
+            oss << "  temperature_attribute = \"" << m_temperature_attribute << "\"," << std::endl;
+        } else {
+            oss << "  temperature = " << string::indent(m_temperature_tex) << "," << std::endl;
+        }
+
+        oss << "]";
         return oss.str();
     }
 
-
     MI_DECLARE_CLASS(BlackBodySpectrum)
+
 private:
-    ScalarFloat m_temperature;
-    ScalarFloat m_integral_min;
-    ScalarFloat m_integral;
+    // Temperature source
+    ref<Texture> m_temperature_tex;       // constant / bitmap path
+    std::string  m_temperature_attribute; // vertex attribute name (Kelvins)
+    bool         m_use_attribute = false;
+
+    // Sampling distribution temperature (Kelvins)
+    ScalarFloat m_sampling_temperature = ScalarFloat(300.0);
+
+    // Sampling distribution state
+    ScalarFloat m_integral_min = 0.f;
+    ScalarFloat m_integral = 0.f;
     ScalarVector2f m_wavelength_range;
 };
 
 MI_EXPORT_PLUGIN(BlackBodySpectrum)
 NAMESPACE_END(mitsuba)
+
