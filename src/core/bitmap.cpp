@@ -1,5 +1,8 @@
 #include <mitsuba/core/bitmap.h>
 #include <mitsuba/core/stream.h>
+#if defined(MI_HAS_LIBTIFF)
+#  include <tiffio.h>
+#endif
 #include <mitsuba/core/logger.h>
 #include <mitsuba/core/util.h>
 #include <mitsuba/core/plugin.h>
@@ -710,6 +713,7 @@ void Bitmap::read(Stream *stream, FileFormat format) {
         case FileFormat::PPM:     read_ppm(stream);   break;
         case FileFormat::TGA:     read_tga(stream);   break;
         case FileFormat::PNG:     read_png(stream);   break;
+        case FileFormat::TIFF:    read_tiff(stream);  break;
         default:
             Throw("Bitmap: Unknown file format!");
     }
@@ -737,6 +741,11 @@ Bitmap::FileFormat Bitmap::detect_file_format(Stream *stream) {
         format = FileFormat::PNG;
     } else if (Imf::isImfMagic((const char *) start)) {
         format = FileFormat::OpenEXR;
+    } else if ((start[0] == 0x49 && start[1] == 0x49 && start[2] == 0x2A && start[3] == 0x00) ||  // Little-endian TIFF
+               (start[0] == 0x4D && start[1] == 0x4D && start[2] == 0x00 && start[3] == 0x2A) ||  // Big-endian TIFF
+               (start[0] == 0x49 && start[1] == 0x49 && start[2] == 0x2B && start[3] == 0x00) ||  // Little-endian BigTIFF
+               (start[0] == 0x4D && start[1] == 0x4D && start[2] == 0x00 && start[3] == 0x2B)) {  // Big-endian BigTIFF
+        format = FileFormat::TIFF;
     } else {
         // Check for a TGAv2 file
         char footer[18];
@@ -774,6 +783,8 @@ void Bitmap::write(Stream *stream, FileFormat format, int quality) const {
             format = FileFormat::PFM;
         else if (extension == ".ppm")
             format = FileFormat::PPM;
+        else if (extension == ".tif" || extension == ".tiff")
+            format = FileFormat::TIFF;
         else
             Throw("Bitmap::write(): unsupported bitmap file extension \"%s\"",
                   extension);
@@ -812,6 +823,10 @@ void Bitmap::write(Stream *stream, FileFormat format, int quality) const {
 
         case FileFormat::PFM:
             write_pfm(stream);
+            break;
+
+        case FileFormat::TIFF:
+            write_tiff(stream, quality);
             break;
 
         default:
@@ -2511,6 +2526,211 @@ void Bitmap::read_tga(Stream *stream) {
     }
 }
 
+// -----------------------------------------------------------------------------
+//   TIFF bitmap I/O (single-channel 32-bit float, supports BigTIFF)
+// -----------------------------------------------------------------------------
+
+#if defined(MI_HAS_LIBTIFF)
+
+namespace {
+    struct TIFFStreamData {
+        Stream *stream;
+        size_t start_offset;
+    };
+
+    tsize_t tiff_read(thandle_t handle, tdata_t data, tsize_t size) {
+        TIFFStreamData *sd = static_cast<TIFFStreamData *>(handle);
+        sd->stream->read(data, size);
+        return size;
+    }
+
+    tsize_t tiff_write(thandle_t, tdata_t, tsize_t) {
+        return 0;
+    }
+
+    tsize_t tiff_write_stream(thandle_t handle, tdata_t data, tsize_t size) {
+        TIFFStreamData *sd = static_cast<TIFFStreamData *>(handle);
+        sd->stream->write(data, size);
+        return size;
+    }
+
+    toff_t tiff_seek(thandle_t handle, toff_t offset, int whence) {
+        TIFFStreamData *sd = static_cast<TIFFStreamData *>(handle);
+        size_t new_pos;
+        switch (whence) {
+            case SEEK_SET: new_pos = sd->start_offset + (size_t) offset; break;
+            case SEEK_CUR: new_pos = sd->stream->tell() + (size_t) offset; break;
+            case SEEK_END: new_pos = sd->stream->size() + (size_t) offset; break;
+            default: return (toff_t) -1;
+        }
+        sd->stream->seek(new_pos);
+        return (toff_t) (new_pos - sd->start_offset);
+    }
+
+    int tiff_close(thandle_t) { return 0; }
+
+    toff_t tiff_size(thandle_t handle) {
+        TIFFStreamData *sd = static_cast<TIFFStreamData *>(handle);
+        return (toff_t) (sd->stream->size() - sd->start_offset);
+    }
+
+    int tiff_map(thandle_t, tdata_t *, toff_t *) { return 0; }
+    void tiff_unmap(thandle_t, tdata_t, toff_t) { }
+
+    void tiff_error_handler(const char *, const char *fmt, va_list ap) {
+        char msg[1024];
+        vsnprintf(msg, sizeof(msg), fmt, ap);
+        Throw("libtiff error: %s", msg);
+    }
+
+    void tiff_warning_handler(const char *, const char *fmt, va_list ap) {
+        char msg[1024];
+        vsnprintf(msg, sizeof(msg), fmt, ap);
+        Log(Warn, "libtiff warning: %s", msg);
+    }
+}
+
+void Bitmap::read_tiff(Stream *stream) {
+    ScopedPhase phase(ProfilerPhase::BitmapRead);
+
+    TIFFSetErrorHandler(tiff_error_handler);
+    TIFFSetWarningHandler(tiff_warning_handler);
+
+    TIFFStreamData stream_data{ stream, stream->tell() };
+
+    TIFF *tif = TIFFClientOpen("stream", "rm", &stream_data,
+        tiff_read, tiff_write, tiff_seek, tiff_close,
+        tiff_size, tiff_map, tiff_unmap);
+
+    if (!tif)
+        Throw("read_tiff(): Failed to open TIFF stream");
+
+    try {
+        uint32_t width, height;
+        if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width) ||
+            !TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height))
+            Throw("read_tiff(): Failed to read image dimensions");
+
+        uint16_t samples_per_pixel = 1, bits_per_sample = 1,
+                 sample_format = SAMPLEFORMAT_UINT;
+        TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel);
+        TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE,   &bits_per_sample);
+        TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLEFORMAT,    &sample_format);
+
+        if (samples_per_pixel != 1)
+            Throw("read_tiff(): Only single-channel images are supported (got %u channels)",
+                  samples_per_pixel);
+        if (bits_per_sample != 32)
+            Throw("read_tiff(): Only 32-bit images are supported (got %u bits)",
+                  bits_per_sample);
+        if (sample_format != SAMPLEFORMAT_IEEEFP)
+            Throw("read_tiff(): Only floating-point format is supported");
+        if (TIFFIsTiled(tif))
+            Throw("read_tiff(): Tiled TIFF images are not supported");
+
+        m_size = Vector2u(width, height);
+        m_pixel_format = PixelFormat::Y;
+        m_component_format = Struct::Type::Float32;
+        m_srgb_gamma = false;
+        m_premultiplied_alpha = false;
+        rebuild_struct();
+
+        size_t row_stride = (size_t) width * sizeof(float);
+        m_data = std::unique_ptr<uint8_t[]>(new uint8_t[row_stride * height]);
+        m_owns_data = true;
+
+        auto fs = dynamic_cast<FileStream *>(stream);
+        Log(Debug, "Loading TIFF file \"%s\" (%ux%u, %s, %s) ..",
+            fs ? fs->path().string() : "<stream>", m_size.x(), m_size.y(),
+            m_pixel_format, m_component_format);
+
+        tsize_t scanline_size = TIFFScanlineSize(tif);
+        if ((size_t) scanline_size != row_stride)
+            Throw("read_tiff(): Unexpected scanline size (got %zu, expected %zu)",
+                  (size_t) scanline_size, row_stride);
+
+        uint8_t *ptr = m_data.get();
+        for (uint32_t row = 0; row < height; ++row) {
+            if (TIFFReadScanline(tif, ptr, row) < 0)
+                Throw("read_tiff(): Failed to read scanline %u", row);
+            ptr += row_stride;
+        }
+
+        TIFFClose(tif);
+    } catch (...) {
+        TIFFClose(tif);
+        throw;
+    }
+}
+
+void Bitmap::write_tiff(Stream *stream, int quality) const {
+    ScopedPhase phase(ProfilerPhase::BitmapWrite);
+
+    if (m_pixel_format != PixelFormat::Y)
+        Throw("write_tiff(): Only single-channel (Y) images are supported");
+    if (m_component_format != Struct::Type::Float32)
+        Throw("write_tiff(): Only 32-bit float format is supported");
+
+    TIFFSetErrorHandler(tiff_error_handler);
+    TIFFSetWarningHandler(tiff_warning_handler);
+
+    TIFFStreamData stream_data{ stream, stream->tell() };
+
+    size_t estimated_size = (size_t) m_size.x() * m_size.y() * sizeof(float);
+    const char *mode = estimated_size > 4000000000ULL ? "w8" : "w";
+
+    TIFF *tif = TIFFClientOpen("stream", mode, &stream_data,
+        tiff_read, tiff_write_stream, tiff_seek, tiff_close,
+        tiff_size, tiff_map, tiff_unmap);
+
+    if (!tif)
+        Throw("write_tiff(): Failed to open TIFF stream for writing");
+
+    try {
+        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH,      (uint32_t) m_size.x());
+        TIFFSetField(tif, TIFFTAG_IMAGELENGTH,     (uint32_t) m_size.y());
+        TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
+        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE,   32);
+        TIFFSetField(tif, TIFFTAG_SAMPLEFORMAT,    SAMPLEFORMAT_IEEEFP);
+        TIFFSetField(tif, TIFFTAG_PHOTOMETRIC,     PHOTOMETRIC_MINISBLACK);
+        TIFFSetField(tif, TIFFTAG_PLANARCONFIG,    PLANARCONFIG_CONTIG);
+        TIFFSetField(tif, TIFFTAG_ORIENTATION,     ORIENTATION_TOPLEFT);
+        TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP,    1);
+
+        if (quality < 0)
+            TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_ADOBE_DEFLATE);
+        else if (quality == 0)
+            TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
+        else
+            TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
+
+        size_t row_stride = (size_t) m_size.x() * sizeof(float);
+        const uint8_t *ptr = uint8_data();
+        for (uint32_t row = 0; row < (uint32_t) m_size.y(); ++row) {
+            if (TIFFWriteScanline(tif, const_cast<uint8_t *>(ptr), row) < 0)
+                Throw("write_tiff(): Failed to write scanline %u", row);
+            ptr += row_stride;
+        }
+
+        TIFFClose(tif);
+    } catch (...) {
+        TIFFClose(tif);
+        throw;
+    }
+}
+
+#else  // MI_HAS_LIBTIFF
+
+void Bitmap::read_tiff(Stream *) {
+    Throw("read_tiff(): Mitsuba was compiled without libtiff support");
+}
+
+void Bitmap::write_tiff(Stream *, int) const {
+    Throw("write_tiff(): Mitsuba was compiled without libtiff support");
+}
+
+#endif  // MI_HAS_LIBTIFF
+
 std::ostream &operator<<(std::ostream &os, Bitmap::PixelFormat value) {
     switch (value) {
         case Bitmap::PixelFormat::Y:            os << "y"; break;
@@ -2533,6 +2753,7 @@ std::ostream &operator<<(std::ostream &os, Bitmap::FileFormat value) {
         case Bitmap::FileFormat::OpenEXR: os << "OpenEXR"; break;
         case Bitmap::FileFormat::JPEG:    os << "JPEG"; break;
         case Bitmap::FileFormat::BMP:     os << "BMP"; break;
+        case Bitmap::FileFormat::TIFF:    os << "TIFF"; break;
         case Bitmap::FileFormat::PFM:     os << "PFM"; break;
         case Bitmap::FileFormat::PPM:     os << "PPM"; break;
         case Bitmap::FileFormat::RGBE:    os << "RGBE"; break;

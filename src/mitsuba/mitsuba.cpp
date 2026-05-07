@@ -310,6 +310,14 @@ int main(int argc, char *argv[]) {
         if (!fr->contains(base_path))
             fr->append(base_path);
 
+        // Add additional paths from the SupportPackages build
+        #ifdef ADDITIONAL_PLUGIN_PATH
+            fr->append(ADDITIONAL_PLUGIN_PATH);
+        #endif
+        #ifdef ADDITIONAL_DATA_PATH
+            fr->append(ADDITIONAL_DATA_PATH);
+        #endif
+
         // Append extra paths from command line arguments to the FileResolver search path list
         if (*arg_paths) {
             auto extra_paths = string::tokenize(arg_paths->as_string(), ";");

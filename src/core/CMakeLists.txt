@@ -71,7 +71,11 @@ set_property(
 )
 
 target_compile_definitions(mitsuba-core
-  PRIVATE ${PNG_DEFINES} -DMI_BUILD_MODULE=MI_MODULE_LIB)
+  PUBLIC
+    ${PNG_DEFINES}
+    ${TIFF_DEFINES}
+    -DMI_BUILD_MODULE=MI_MODULE_LIB
+    -DSUPPORTPACKAGES_MITSUBA_PLUGIN_PATH=${MI_FILERESOLVER_SP_PATH})
 
 set_target_properties(mitsuba-core PROPERTIES
   INTERPROCEDURAL_OPTIMIZATION ON)
@@ -79,15 +83,24 @@ set_target_properties(mitsuba-core PROPERTIES
 set_target_properties(mitsuba-core PROPERTIES
   POSITION_INDEPENDENT_CODE ON)
 
-target_link_libraries(mitsuba-core PRIVATE
-  # Link to zlib (either the system version or a version built via cmake)
-  ${ZLIB_LIBRARY}
+target_link_libraries(mitsuba-core PUBLIC
   nanothread
-  # Link pugixml parser
-  pugixml
-  # Image libraries: link to libjpeg, libpng, OpenEXR
-  ${PNG_LIBRARIES} ${JPEG_LIBRARIES} IlmImf
+  JPEG::JPEG
+  PNG::PNG
+  TIFF::TIFF
 )
+
+if(MI_EXTERNAL_OPENEXR)
+  target_link_libraries(mitsuba-core PUBLIC OpenEXR::OpenEXR)
+else()
+  target_link_libraries(mitsuba-core PUBLIC IlmImf)
+endif()
+
+if(MI_EXTERNAL_PUGIXML)
+  target_link_libraries(mitsuba-core PUBLIC pugixml::pugixml)
+else()
+  target_link_libraries(mitsuba-core PUBLIC pugixml)
+endif()
 
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(amd64)|(AMD64)")
   target_link_libraries(mitsuba-core PRIVATE asmjit)
@@ -98,7 +111,7 @@ if (NOT MSVC)
 endif()
 
 target_link_libraries(mitsuba-core PUBLIC drjit)
-target_link_libraries(mitsuba-core PRIVATE fast_float)
+target_link_libraries(mitsuba-core PUBLIC fast_float)
 
 if (MI_ENABLE_JIT)
   target_link_libraries(mitsuba-core PUBLIC drjit-core)

@@ -153,6 +153,18 @@ public:
          */
         BMP,
 
+        /**
+         * \brief Tagged Image File Format
+         *
+         * The following is supported:
+         * <ul>
+         *   <li>Loading of single-channel 32-bit floating point images</li>
+         *   <li>LZW and ZIP/Deflate compression</li>
+         *   <li>BigTIFF format for large files</li>
+         * </ul>
+         */
+        TIFF,
+
         /// Unknown file format
         Unknown,
 
@@ -627,6 +639,12 @@ public:
 
      /// Read a file encoded using the BMP file format
      void read_bmp(Stream *stream);
+
+     /// Read a file encoded using the TIFF file format
+     void read_tiff(Stream *stream);
+
+     /// Write a file using the TIFF file format
+     void write_tiff(Stream *stream, int quality = -1) const;
 
      /// Read a file encoded using the TGA file format
      void read_tga(Stream *stream);
