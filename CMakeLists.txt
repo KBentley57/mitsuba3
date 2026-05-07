@@ -789,10 +789,15 @@ target_include_directories(mitsuba
     $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/nanobind/include>
     $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/nanobind/ext/robin_map/include>
     $<BUILD_INTERFACE:${_MI_EXT}/fastfloat/include>
+    $<BUILD_INTERFACE:${_MI_EXT}/asmjit/src>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/mitsuba/ext>
 )
 unset(_MI_EXT)
+
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(amd64)|(AMD64)")
+  target_link_libraries(mitsuba INTERFACE asmjit)
+endif()
 
 # Install bundled ext headers that consumers need
 install(
@@ -823,6 +828,10 @@ install(
 )
 install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/fastfloat/include/fast_float
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/asmjit/src/asmjit
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
