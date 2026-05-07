@@ -353,7 +353,11 @@ elseif(UNIX)
   set(MI_ORIGIN "$ORIGIN")
 endif()
 
-set(CMAKE_INSTALL_RPATH "${MI_ORIGIN};${MI_ORIGIN}/../drjit")
+# Python extension modules install at lib/python<VER>/{mitsuba,drjit}/, so
+# they need to walk up two directories ($ORIGIN/../..) to find the shared
+# libs they depend on (libmitsuba.so, libdrjit-*.so, etc.) in lib/.
+# $ORIGIN itself covers sibling .so files in the same package directory.
+set(CMAKE_INSTALL_RPATH "${MI_ORIGIN};${MI_ORIGIN}/../..")
 
 # Build the dependencies
 add_subdirectory(ext)
