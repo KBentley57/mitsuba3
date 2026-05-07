@@ -9,8 +9,38 @@ add_subdirectory(core)
 add_subdirectory(render)
 
 add_library(mitsuba SHARED)
-target_link_libraries(mitsuba PUBLIC mitsuba-core)
-target_link_libraries(mitsuba PUBLIC mitsuba-render)
+target_link_libraries(mitsuba PRIVATE mitsuba-core mitsuba-render)
+
+# Re-export the PUBLIC deps from the OBJECT libs onto `mitsuba` itself so
+# they appear in MitsubaTargets.cmake (without the OBJECT libs themselves).
+target_link_libraries(mitsuba PUBLIC
+  nanothread
+  JPEG::JPEG
+  PNG::PNG
+  TIFF::TIFF
+  drjit
+  fast_float)
+
+if(MI_EXTERNAL_OPENEXR)
+  target_link_libraries(mitsuba PUBLIC OpenEXR::OpenEXR)
+else()
+  target_link_libraries(mitsuba PUBLIC IlmImf)
+endif()
+
+if(MI_EXTERNAL_PUGIXML)
+  target_link_libraries(mitsuba PUBLIC pugixml::pugixml)
+else()
+  target_link_libraries(mitsuba PUBLIC pugixml)
+endif()
+
+if (MI_ENABLE_JIT)
+  target_link_libraries(mitsuba PUBLIC drjit-core)
+endif()
+
+if (MI_ENABLE_AUTODIFF)
+  target_link_libraries(mitsuba PUBLIC drjit-extra)
+endif()
+
 set_target_properties(mitsuba PROPERTIES INTERPROCEDURAL_OPTIMIZATION ON)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "^(GNU)$")
