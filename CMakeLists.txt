@@ -603,7 +603,13 @@ set_target_properties(mitsuba-bin mitsuba ${MI_DEPEND}
 )
 
 install(
-  TARGETS mitsuba-bin mitsuba ${MI_DEPEND}
+  TARGETS mitsuba-bin
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(
+  TARGETS mitsuba ${MI_DEPEND}
+  EXPORT MitsubaTargets
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
@@ -683,4 +689,81 @@ endif()
 install(
   DIRECTORY ${MI_BINARY_DIR}/data/sunsky
   DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}
+)
+
+# ---------------------------------------------------------------------------
+# CMake package config — lets consumers find_package(mitsuba)
+# ---------------------------------------------------------------------------
+
+# Attach include dirs to the exported mitsuba target so consumers get them
+# automatically via target_link_libraries(... Mitsuba::mitsuba).
+set(_MI_EXT ${CMAKE_CURRENT_SOURCE_DIR}/ext)
+target_include_directories(mitsuba
+  INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${_MI_EXT}/drjit/include>
+    $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/drjit-core/include>
+    $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/drjit-core/ext/nanothread/include>
+    $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/drjit-core/ext/robin_map/include>
+    $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/nanobind/include>
+    $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/nanobind/ext/robin_map/include>
+    $<BUILD_INTERFACE:${_MI_EXT}/fastfloat/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+unset(_MI_EXT)
+
+# Install bundled ext headers that consumers need
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit/include/drjit
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit/ext/drjit-core/include/drjit-core
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit/ext/drjit-core/ext/nanothread/include/nanothread
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit/ext/drjit-core/ext/robin_map/include/tsl
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit/ext/nanobind/include/nanobind
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/fastfloat/include/fast_float
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Export the targets file
+install(
+  EXPORT MitsubaTargets
+  FILE MitsubaTargets.cmake
+  NAMESPACE Mitsuba::
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mitsuba
+)
+
+# Generate and install the config/version files
+include(CMakePackageConfigHelpers)
+
+configure_package_config_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/mitsuba-config.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/mitsuba-config.cmake
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mitsuba
+)
+
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/mitsuba-config-version.cmake
+  VERSION ${MI_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+
+install(
+  FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/mitsuba-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/mitsuba-config-version.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mitsuba
 )
