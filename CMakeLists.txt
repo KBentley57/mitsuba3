@@ -194,6 +194,12 @@ if (NOT Python_EXECUTABLE)
   find_package(Python COMPONENTS Interpreter REQUIRED)
 endif()
 
+# Standard site-packages-style install paths for the python bindings.
+set(MI_PYTHON_INSTALL_DIR
+  ${CMAKE_INSTALL_LIBDIR}/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR})
+set(MI_MITSUBA_PY_DEST ${MI_PYTHON_INSTALL_DIR}/mitsuba)
+set(MI_DRJIT_PY_DEST   ${MI_PYTHON_INSTALL_DIR}/drjit)
+
 execute_process(
   COMMAND ${Python_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/resources/configure.py
@@ -294,21 +300,25 @@ if (NOT SKBUILD)
   if (NOT MSVC)
       configure_file(${CMAKE_CURRENT_SOURCE_DIR}/resources/setpath.sh
                      ${CMAKE_CURRENT_BINARY_DIR}/setpath.sh @ONLY)
-      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setpath.sh DESTINATION ".")
+      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setpath.sh
+              DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mitsuba)
   else()
       configure_file(${CMAKE_CURRENT_SOURCE_DIR}/resources/setpath.sh
                      ${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.sh @ONLY)
-      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setpath.sh DESTINATION ".")
+      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setpath.sh
+              DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mitsuba)
       ro_copy(${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.sh setpath.sh)
 
       configure_file(${CMAKE_CURRENT_SOURCE_DIR}/resources/setpath.bat
                      ${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.bat @ONLY)
-      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.bat DESTINATION ".")
+      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.bat
+              DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mitsuba)
       ro_copy(${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.bat setpath.bat)
 
       configure_file(${CMAKE_CURRENT_SOURCE_DIR}/resources/setpath.ps1
                      ${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.ps1 @ONLY)
-      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.ps1 DESTINATION ".")
+      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.ps1
+              DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mitsuba)
       ro_copy(${CMAKE_CURRENT_BINARY_DIR}/resources/setpath.ps1 setpath.ps1)
   endif()
 endif()
@@ -513,6 +523,75 @@ endif()
 # Register the Mitsuba codebase
 add_subdirectory(src)
 
+# ----------------------------------------------------------
+#  Install drjit's python package into the standard site-packages location.
+#  Drjit's own CMakeLists only emits these rules under DRJIT_MASTER_PROJECT,
+#  so as a submodule of Mitsuba we install them ourselves.
+# ----------------------------------------------------------
+
+if (MI_ENABLE_PYTHON AND NOT SKBUILD)
+  set(_DRJIT_BUILD ${MI_BINARY_DIR}/python/drjit)
+
+  install(TARGETS drjit-python
+    LIBRARY DESTINATION ${MI_DRJIT_PY_DEST}
+  )
+
+  install(FILES
+    ${_DRJIT_BUILD}/config.py
+    ${_DRJIT_BUILD}/__init__.pyi
+    ${_DRJIT_BUILD}/__init__.py
+    ${_DRJIT_BUILD}/ast.pyi
+    ${_DRJIT_BUILD}/ast.py
+    ${_DRJIT_BUILD}/dda.py
+    ${_DRJIT_BUILD}/detail.pyi
+    ${_DRJIT_BUILD}/detail.py
+    ${_DRJIT_BUILD}/hashgrid.pyi
+    ${_DRJIT_BUILD}/hashgrid.py
+    ${_DRJIT_BUILD}/interop.pyi
+    ${_DRJIT_BUILD}/interop.py
+    ${_DRJIT_BUILD}/nn.pyi
+    ${_DRJIT_BUILD}/nn.py
+    ${_DRJIT_BUILD}/opt.py
+    ${_DRJIT_BUILD}/random.pyi
+    ${_DRJIT_BUILD}/random.py
+    ${_DRJIT_BUILD}/py.typed
+    DESTINATION ${MI_DRJIT_PY_DEST}
+  )
+  install(FILES
+    ${_DRJIT_BUILD}/scalar/__init__.pyi
+    ${_DRJIT_BUILD}/scalar/__init__.py
+    DESTINATION ${MI_DRJIT_PY_DEST}/scalar
+  )
+  install(FILES
+    ${_DRJIT_BUILD}/llvm/py.typed
+    ${_DRJIT_BUILD}/llvm/__init__.pyi
+    ${_DRJIT_BUILD}/llvm/__init__.py
+    ${_DRJIT_BUILD}/llvm/ad.pyi
+    ${_DRJIT_BUILD}/llvm/ad.py
+    DESTINATION ${MI_DRJIT_PY_DEST}/llvm
+  )
+  install(FILES
+    ${_DRJIT_BUILD}/auto/py.typed
+    ${_DRJIT_BUILD}/auto/__init__.pyi
+    ${_DRJIT_BUILD}/auto/__init__.py
+    ${_DRJIT_BUILD}/auto/ad.pyi
+    ${_DRJIT_BUILD}/auto/ad.py
+    DESTINATION ${MI_DRJIT_PY_DEST}/auto
+  )
+  if (DRJIT_ENABLE_CUDA)
+    install(FILES
+      ${_DRJIT_BUILD}/cuda/py.typed
+      ${_DRJIT_BUILD}/cuda/__init__.pyi
+      ${_DRJIT_BUILD}/cuda/__init__.py
+      ${_DRJIT_BUILD}/cuda/ad.pyi
+      ${_DRJIT_BUILD}/cuda/ad.py
+      DESTINATION ${MI_DRJIT_PY_DEST}/cuda
+    )
+  endif()
+
+  unset(_DRJIT_BUILD)
+endif()
+
 # Documentation
 if (NOT SKBUILD)
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake")
@@ -549,26 +628,24 @@ if (MI_COPIED_CONFIG_FILE AND NOT SKBUILD)
 endif()
 
 # Installation targets
-if(MI_EXTERNAL_OPENEXR)
-  set(MI_DEPEND)
-else()
-  set(MI_DEPEND IlmImf IlmThread Imath Iex IexMath Half)
+# IlmBase/OpenEXR already install their own cmake targets (IlmBaseTargets,
+# OpenEXRTargets), so we must NOT put them in MitsubaTargets — exporting a
+# target to two export sets is an error. We handle the consumer side via
+# find_dependency() in mitsuba-config.cmake.in instead.
+set(MI_DEPEND)
+
+if(NOT MI_EXTERNAL_PUGIXML)
+  list(APPEND MI_DEPEND pugixml)
 endif()
 
 list(APPEND MI_DEPEND struct-jit)
-
-#list(APPEND MI_DEPEND png jpeg)
-
-#if (WIN32)
-#  list(APPEND MI_DEPEND zlib)
-#endif()
 
 if (MI_ENABLE_EMBREE AND NOT MI_EXTERNAL_EMBREE)
   list(APPEND MI_DEPEND embree)
 endif()
 
 if (NOT SKBUILD)
-  list(APPEND MI_DEPEND nanothread)
+  list(APPEND MI_DEPEND nanothread drjit fast_float)
 
   if (MI_ENABLE_JIT)
     list(APPEND MI_DEPEND drjit-core)
@@ -658,7 +735,7 @@ else()
 endif()
 install(
   FILES ${CMAKE_CURRENT_BINARY_DIR}/data/srgb.coeff
-  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}
+  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mitsuba/data
 )
 
 add_custom_target(copy-resources ALL DEPENDS ${MI_COPY_FILES})
@@ -681,7 +758,7 @@ if (MSVC AND MI_ENABLE_PYTHON)
 endif()
 install(
   DIRECTORY ${MI_BINARY_DIR}/data/ior
-  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}
+  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mitsuba
 )
 
 # Sunsky data
@@ -702,7 +779,7 @@ if (MSVC AND MI_ENABLE_PYTHON)
 endif()
 install(
   DIRECTORY ${MI_BINARY_DIR}/data/sunsky
-  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}
+  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mitsuba
 )
 
 # ---------------------------------------------------------------------------
@@ -723,6 +800,7 @@ target_include_directories(mitsuba
     $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/nanobind/ext/robin_map/include>
     $<BUILD_INTERFACE:${_MI_EXT}/fastfloat/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/mitsuba/ext>
 )
 unset(_MI_EXT)
 
@@ -743,9 +821,15 @@ install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit/ext/drjit-core/ext/robin_map/include/tsl
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
+# Install nanobind under include/mitsuba/ext/ rather than directly at
+# include/. Mitsuba's own configure refuses to build if it finds
+# <nanobind/nanobind.h> on its default include path (it insists on using its
+# bundled copy), so namespacing the install avoids self-conflict on a
+# rebuild. Consumers still get the headers because we add include/mitsuba/ext/
+# to the exported Mitsuba::mitsuba target's INSTALL_INTERFACE include dirs.
 install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit/ext/nanobind/include/nanobind
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mitsuba/ext
 )
 install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/fastfloat/include/fast_float
