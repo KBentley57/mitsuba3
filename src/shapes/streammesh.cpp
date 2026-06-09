@@ -42,6 +42,8 @@ public:
             ? props.get_any<std::uint32_t*>("faces") : nullptr;
         int vertex_count = props.get<int>("vertex_count");
         int face_count = props.get<int>("face_count");
+        bool pretransformed = props.get<bool>("pretransformed", false);
+        bool trust_normals = props.get<bool>("trust_normals", false);
 
         init( positions
             , normals
@@ -50,7 +52,9 @@ public:
             , faces
             , vertex_count
             , face_count
-            , props.get<bool>("flip_tex_coords", true) );
+            , props.get<bool>("flip_tex_coords", true)
+            , pretransformed
+            , trust_normals );
     }
 
     void init( float* in_positions
@@ -60,7 +64,9 @@ public:
              , std::uint32_t* in_faces
              , std::uint32_t vertex_count
              , std::uint32_t face_count
-             , bool flip_tex_coords=false )     
+             , bool flip_tex_coords=false
+             , bool pretransformed=false
+             , bool trust_normals=false )
     {
       ScopedPhase phase(ProfilerPhase::LoadGeometry);
 
@@ -76,40 +82,60 @@ public:
       m_vertex_count = (ScalarIndex)vertex_count;
       m_face_count = (ScalarSize)face_count;
 
-      std::unique_ptr<float[]> vertices(new float[vertex_count * 3]);
-      for (std::size_t i = 0; i < vertex_count; i++) 
-      {
-        InputPoint3f p{ in_positions[3*i + 0]
-                      , in_positions[3*i + 1]
-                      , in_positions[3*i + 2] };
-        p = m_to_world.scalar() * p;
-        if (unlikely(!all(dr::isfinite(p)))) {
-            Throw("mesh contains invalid vertex position data");
+      if (pretransformed) {
+        for (std::size_t i = 0; i < vertex_count; i++)
+        {
+          InputPoint3f p{ in_positions[3*i + 0]
+                        , in_positions[3*i + 1]
+                        , in_positions[3*i + 2] };
+          if (unlikely(!all(dr::isfinite(p)))) {
+              Throw("mesh contains invalid vertex position data");
+          }
+          m_bbox.expand(p);
         }
-        m_bbox.expand(p);
-        InputVector3f pv = p;
-        InputFloat* ptr = vertices.get() + (3*i);
-        dr::store(ptr, pv);
+        m_vertex_positions = dr::load<FloatStorage>(in_positions, m_vertex_count * 3);
+      } else {
+        std::unique_ptr<float[]> vertices(new float[vertex_count * 3]);
+        for (std::size_t i = 0; i < vertex_count; i++)
+        {
+          InputPoint3f p{ in_positions[3*i + 0]
+                        , in_positions[3*i + 1]
+                        , in_positions[3*i + 2] };
+          p = m_to_world.scalar() * p;
+          if (unlikely(!all(dr::isfinite(p)))) {
+              Throw("mesh contains invalid vertex position data");
+          }
+          m_bbox.expand(p);
+          InputVector3f pv = p;
+          InputFloat* ptr = vertices.get() + (3*i);
+          dr::store(ptr, pv);
+        }
+        m_vertex_positions = dr::load<FloatStorage>(vertices.get(), m_vertex_count * 3);
       }
-      m_vertex_positions = dr::load<FloatStorage>(vertices.get(), m_vertex_count * 3);
 
       if (in_normals) 
       {
-        std::unique_ptr<float[]> normals(new float[vertex_count * 3]);
-        for (std::size_t i = 0; i < vertex_count; i++) 
-        {
-          InputNormal3f n{ in_normals[3*i + 0]
-                         , in_normals[3*i + 1]
-                         , in_normals[3*i + 2] };
-          n = dr::normalize(m_to_world.scalar() * n);
-          if (unlikely(!all(dr::isfinite(n)))) {
-              Throw("mesh contains invalid vertex normal data");
+        if (pretransformed && trust_normals) {
+          if (!m_face_normals) {
+              m_vertex_normals = dr::load<FloatStorage>(in_normals, m_vertex_count * 3);
           }
-          InputFloat* ptr = normals.get() + (3*i);
-          dr::store(ptr, n);
-        }
-        if (!m_face_normals) {
-            m_vertex_normals = dr::load<FloatStorage>(normals.get(), m_vertex_count * 3);
+        } else {
+          std::unique_ptr<float[]> normals(new float[vertex_count * 3]);
+          for (std::size_t i = 0; i < vertex_count; i++)
+          {
+            InputNormal3f n{ in_normals[3*i + 0]
+                           , in_normals[3*i + 1]
+                           , in_normals[3*i + 2] };
+            n = dr::normalize(m_to_world.scalar() * n);
+            if (unlikely(!all(dr::isfinite(n)))) {
+                Throw("mesh contains invalid vertex normal data");
+            }
+            InputFloat* ptr = normals.get() + (3*i);
+            dr::store(ptr, n);
+          }
+          if (!m_face_normals) {
+              m_vertex_normals = dr::load<FloatStorage>(normals.get(), m_vertex_count * 3);
+          }
         }
       }
 
