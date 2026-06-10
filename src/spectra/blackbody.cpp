@@ -109,8 +109,8 @@ public:
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
-        m_integral_min = cdf_and_pdf(ScalarFloat(m_wavelength_range.x())).first;
-        m_integral = cdf_and_pdf(ScalarFloat(m_wavelength_range.y())).first - m_integral_min;
+        std::tie(m_integral_min, m_integral) =
+            integral_bounds(ScalarFloat(m_sampling_temperature));
     }
 
     /// Evaluate Planck's law for the provided temperature (Kelvins).
@@ -185,10 +185,15 @@ public:
             active &= si.wavelengths >= m_wavelength_range.x()
                    && si.wavelengths <= m_wavelength_range.y();
 
-            // Wien's approximation to Planck's law, using sampling temperature
-            ScalarFloat K = m_sampling_temperature;
+            Wavelength K = dr::maximum(Wavelength(temperature_at_si(si, active_)),
+                                       Wavelength(1e-3f));
+            auto [integral_min, integral] = integral_bounds(K);
+
+            DRJIT_MARK_USED(integral_min);
+
+            // Wien's approximation to Planck's law at the local temperature.
             Wavelength pdf = 1e-9f * c0 * dr::exp(-c1 / (lambda * K))
-                / (lambda5 * m_integral);
+                / (lambda5 * integral);
 
             return pdf & active;
         } else {
@@ -199,15 +204,15 @@ public:
     }
 
     template <typename Value>
-    std::pair<Value, Value> cdf_and_pdf(Value lambda) const {
+    std::pair<Value, Value> cdf_and_pdf(Value lambda, Value K) const {
         Value c1_2 = dr::square(c1),
               c1_3 = c1_2 * c1,
               c1_4 = dr::square(c1_2);
 
-        // Use sampling temperature for sampling distribution math
-        const Value K  = Value(m_sampling_temperature),
-                    K2 = dr::square(K),
-                    K3 = K2 * K;
+        K = dr::maximum(K, Value(1e-3f));
+
+        Value K2 = dr::square(K),
+              K3 = K2 * K;
 
         lambda *= 1e-9f;
 
@@ -226,8 +231,16 @@ public:
         return { cdf, pdf };
     }
 
+    template <typename Value>
+    std::pair<Value, Value> integral_bounds(Value K) const {
+        Value integral_min = cdf_and_pdf(Value(m_wavelength_range.x()), K).first,
+              integral_max = cdf_and_pdf(Value(m_wavelength_range.y()), K).first;
+
+        return { integral_min, integral_max - integral_min };
+    }
+
     std::pair<Wavelength, UnpolarizedSpectrum>
-    sample_spectrum(const SurfaceInteraction3f & /* si */,
+    sample_spectrum(const SurfaceInteraction3f &si,
                     const Wavelength &sample_, Mask active_) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureSample, active_);
 
@@ -235,12 +248,15 @@ public:
 
         if constexpr (is_spectral_v<Spectrum>) {
             WavelengthMask active = active_;
+            Wavelength K = dr::maximum(Wavelength(temperature_at_si(si, active_)),
+                                       Wavelength(1e-3f));
+            auto [integral_min, integral] = integral_bounds(K);
 
-            Wavelength sample = dr::fmadd(sample_, Wavelength(m_integral), Wavelength(m_integral_min));
+            Wavelength sample = dr::fmadd(sample_, integral, integral_min);
 
             const ScalarFloat eps        = 1e-5f,
-                              eps_domain = eps * (m_wavelength_range.y() - m_wavelength_range.x()),
-                              eps_value  = eps * m_integral;
+                              eps_domain = eps * (m_wavelength_range.y() - m_wavelength_range.x());
+            Wavelength eps_value = eps * integral;
 
             Wavelength a = m_wavelength_range.x(),
                        b = m_wavelength_range.y(),
@@ -253,7 +269,7 @@ public:
                 dr::masked(t, bisect_mask && active) = .5f * (a + b);
 
                 // Evaluate the definite integral and its derivative (i.e. the spline)
-                std::tie(value, deriv) = cdf_and_pdf(t);
+                std::tie(value, deriv) = cdf_and_pdf(t, K);
                 value -= sample;
 
                 // Update which lanes are still active
@@ -271,12 +287,8 @@ public:
                 dr::masked(t, active) = t - value / deriv;
             } while (true);
 
-            Wavelength pdf = deriv / m_integral;
-
-            // eval_impl(t, ...) uses sampling temperature when called through the overload below,
-            // so we directly evaluate at t using sampling temperature here.
-            UnpolarizedSpectrum temp_K = UnpolarizedSpectrum(Float(m_sampling_temperature));
-            UnpolarizedSpectrum val = eval_impl(t, temp_K, active_);
+            Wavelength pdf = deriv / integral;
+            UnpolarizedSpectrum val = eval_impl(t, UnpolarizedSpectrum(K), active_);
 
             return { t, val / pdf };
         } else {
@@ -347,4 +359,3 @@ private:
 
 MI_EXPORT_PLUGIN(BlackBodySpectrum)
 NAMESPACE_END(mitsuba)
-
