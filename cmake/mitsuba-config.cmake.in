@@ -9,7 +9,11 @@ find_dependency(PNG REQUIRED)
 find_dependency(TIFF REQUIRED)
 
 if(@MI_EXTERNAL_OPENEXR@)
-  find_dependency(OpenEXR REQUIRED)
+  find_dependency(OpenEXR CONFIG QUIET)
+  if(NOT TARGET OpenEXR::OpenEXR AND NOT TARGET OpenEXR::IlmImf)
+    find_dependency(PkgConfig REQUIRED)
+    pkg_check_modules(PC_OpenEXR REQUIRED IMPORTED_TARGET OpenEXR)
+  endif()
 else()
   # Bundled OpenEXR/IlmBase install their own cmake targets separately.
   set(_mitsuba_old_prefer_config ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})

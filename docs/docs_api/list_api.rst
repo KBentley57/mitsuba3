@@ -182,6 +182,8 @@
 
 .. autofunction:: mitsuba.MI_ENABLE_EMBREE
 
+.. autofunction:: mitsuba.MI_ENABLE_METAL
+
 .. autofunction:: mitsuba.MI_FILTER_RESOLUTION
 
 .. autofunction:: mitsuba.MI_VERSION
@@ -354,6 +356,8 @@
 
 .. autoclass:: mitsuba.RadicalInverse
 
+.. autoclass:: mitsuba.Ray2d
+
 .. autoclass:: mitsuba.Ray2f
 
 .. autoclass:: mitsuba.Ray3d
@@ -451,6 +455,14 @@
 .. autoclass:: mitsuba.ScalarProjectiveTransform4d
 
 .. autoclass:: mitsuba.ScalarProjectiveTransform4f
+
+.. autoclass:: mitsuba.ScalarRay2d
+
+.. autoclass:: mitsuba.ScalarRay2f
+
+.. autoclass:: mitsuba.ScalarRay3d
+
+.. autoclass:: mitsuba.ScalarRay3f
 
 .. autoclass:: mitsuba.ScalarTransform3d
 
@@ -698,6 +710,12 @@
 
 .. autofunction:: mitsuba.ad.largesteps.mesh_laplacian
 
+.. autoclass:: mitsuba.ad.loaders.FlatSensor
+
+.. autoclass:: mitsuba.ad.loaders.RayDataLoader
+
+.. autofunction:: mitsuba.ad.loaders.Tuple
+
 .. autofunction:: mitsuba.chi2.BSDFAdapter
 
 .. autoclass:: mitsuba.chi2.ChiSquareTest
@@ -839,6 +857,8 @@
 .. autofunction:: mitsuba.math.srgb_to_linear
 
 .. autofunction:: mitsuba.math.ulpdiff
+
+.. autofunction:: mitsuba.math_py.chi2
 
 .. autofunction:: mitsuba.math_py.rlgamma
 
@@ -1051,8 +1071,6 @@
 .. autofunction:: mitsuba.traverse
 
 .. autofunction:: mitsuba.unpolarized_spectrum
-
-.. autofunction:: mitsuba.util.Any
 
 .. autofunction:: mitsuba.util.Optional
 

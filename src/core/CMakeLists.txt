@@ -1,7 +1,6 @@
 include_directories(
   ${PNG_INCLUDE_DIRS}
   ${PUGIXML_INCLUDE_DIRS}
-  ${ASMJIT_INCLUDE_DIRS}
   ${ZLIB_INCLUDE_DIR}
   ${OPENEXR_INCLUDE_DIRS}
   ${JPEG_INCLUDE_DIRS}
@@ -15,7 +14,6 @@ add_library(mitsuba-core OBJECT
   ${INC_DIR}/fwd.h
   ${INC_DIR}/hash.h
   ${INC_DIR}/math.h
-  ${INC_DIR}/jit.h
   ${INC_DIR}/simd.h
   ${INC_DIR}/platform.h
 
@@ -32,7 +30,6 @@ add_library(mitsuba-core OBJECT
   formatter.cpp     ${INC_DIR}/formatter.h
   fresolver.cpp     ${INC_DIR}/fresolver.h
   fstream.cpp       ${INC_DIR}/fstream.h
-  jit.cpp           ${INC_DIR}/jit.h
   logger.cpp        ${INC_DIR}/logger.h
   mmap.cpp          ${INC_DIR}/mmap.h
   tensor.cpp        ${INC_DIR}/tensor.h
@@ -49,7 +46,7 @@ add_library(mitsuba-core OBJECT
   spectrum.cpp      ${INC_DIR}/spectrum.h
                     ${INC_DIR}/spline.h
   stream.cpp        ${INC_DIR}/stream.h
-  struct.cpp        ${INC_DIR}/struct.h
+                    ${INC_DIR}/struct.h
   thread.cpp        ${INC_DIR}/thread.h
                     ${INC_DIR}/timer.h
                     ${INC_DIR}/transform.h
@@ -60,8 +57,6 @@ add_library(mitsuba-core OBJECT
   parser.cpp        ${INC_DIR}/parser.h
   zstream.cpp       ${INC_DIR}/zstream.h
                     ${INC_DIR}/quad.h
-
-  dither-matrix256.cpp
 )
 
 set_property(
@@ -90,8 +85,10 @@ target_link_libraries(mitsuba-core PUBLIC
   TIFF::TIFF
 )
 
+target_link_libraries(mitsuba-core PUBLIC struct-jit)
+
 if(MI_EXTERNAL_OPENEXR)
-  target_link_libraries(mitsuba-core PUBLIC OpenEXR::OpenEXR)
+  target_link_libraries(mitsuba-core PUBLIC ${MI_OPENEXR_TARGET})
 else()
   target_link_libraries(mitsuba-core PUBLIC IlmImf)
 endif()
@@ -100,10 +97,6 @@ if(MI_EXTERNAL_PUGIXML)
   target_link_libraries(mitsuba-core PUBLIC pugixml::pugixml)
 else()
   target_link_libraries(mitsuba-core PUBLIC pugixml)
-endif()
-
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(amd64)|(AMD64)")
-  target_link_libraries(mitsuba-core PRIVATE asmjit)
 endif()
 
 if (NOT MSVC)

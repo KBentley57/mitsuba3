@@ -57,7 +57,7 @@ if(MI_EXTERNAL_PUGIXML)
     find_package(pugixml REQUIRED)
 endif()
 
-option(MI_EXTERNAL_JPEG "Use an external libjpeg" OFF)
+option(MI_EXTERNAL_JPEG "Use an external libjpeg" ON)
 if(MI_EXTERNAL_JPEG)
     find_package(JPEG REQUIRED)
     set(JPEG_DEFINES -DMI_HAS_LIBJPEG)
@@ -65,7 +65,7 @@ if(MI_EXTERNAL_JPEG)
     message(STATUS "libjpeg libs: ${JPEG_LIBRARIES}")
 endif()
 
-option(MI_EXTERNAL_PNG "Use an external libpng" OFF)
+option(MI_EXTERNAL_PNG "Use an external libpng" ON)
 if(MI_EXTERNAL_PNG)
     find_package(PNG REQUIRED)
     set(PNG_DEFINES -DMI_HAS_LIBPNG)
@@ -94,10 +94,21 @@ if(MI_EXTERNAL_NANOBIND)
     message(STATUS "Using external nanobind")
 endif()
 
-option(MI_EXTERNAL_OPENEXR "Use an external OpenEXR" OFF)
+option(MI_EXTERNAL_OPENEXR "Use an external OpenEXR" ON)
 if(MI_EXTERNAL_OPENEXR)
-    find_package(OpenEXR REQUIRED)
+    find_package(OpenEXR CONFIG QUIET)
+    if(TARGET OpenEXR::OpenEXR)
+        set(MI_OPENEXR_TARGET OpenEXR::OpenEXR)
+    elseif(TARGET OpenEXR::IlmImf)
+        set(MI_OPENEXR_TARGET OpenEXR::IlmImf)
+    else()
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(PC_OpenEXR REQUIRED IMPORTED_TARGET OpenEXR)
+        set(MI_OPENEXR_TARGET PkgConfig::PC_OpenEXR)
+        set(OpenEXR_LIBRARIES ${PC_OpenEXR_LINK_LIBRARIES})
+    endif()
     message(STATUS "Using external OpenEXR")
+    message(STATUS "OpenEXR target: ${MI_OPENEXR_TARGET}")
     message(STATUS "OpenEXR libs: ${OpenEXR_LIBRARIES}")
 endif()
 
@@ -165,7 +176,11 @@ endif()
 # ----------------------------------------------------------
 
 if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/mitsuba.conf)
-  set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,cuda_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
+  if (APPLE)
+    set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,metal_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
+  else()
+    set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,cuda_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
+  endif()
   string(REPLACE "," ";" MI_DEFAULT_VARIANTS "${MI_DEFAULT_VARIANTS}")
   message(STATUS "MI_DEFAULT_VARIANTS: ${MI_DEFAULT_VARIANTS}")
   mark_as_advanced(MI_DEFAULT_VARIANTS)
@@ -235,7 +250,11 @@ if (MI_VARIANTS MATCHES "llvm_")
   set(MI_ENABLE_LLVM ON)
 endif()
 
-if (MI_ENABLE_LLVM OR MI_ENABLE_CUDA)
+if (MI_VARIANTS MATCHES "metal_")
+  set(MI_ENABLE_METAL ON)
+endif()
+
+if (MI_ENABLE_LLVM OR MI_ENABLE_CUDA OR MI_ENABLE_METAL)
   set(MI_ENABLE_JIT ON)
 endif()
 
@@ -378,6 +397,11 @@ if (MI_ENABLE_LLVM)
   add_definitions(-DMI_ENABLE_LLVM=1)
 endif()
 
+if (MI_ENABLE_METAL)
+  message(STATUS "Mitsuba: using Metal for GPU ray tracing.")
+  add_definitions(-DMI_ENABLE_METAL=1)
+endif()
+
 if (MI_ENABLE_EMBREE)
   include_directories(${EMBREE_INCLUDE_DIRS})
   add_definitions(-DMI_ENABLE_EMBREE=1)
@@ -430,6 +454,9 @@ if (MSVC)
 
   # Don't complain about incompatible modifier on explicit instantiations
   add_compile_options(/wd4910)
+
+  # Member definitions of exported template classes live in separate .cpp files
+  add_compile_options(/wd4661)
 
   # Ensure source and execution charset is encoded as UTF-8
   add_compile_options(/utf-8)
@@ -626,9 +653,7 @@ if(NOT MI_EXTERNAL_PUGIXML)
   list(APPEND MI_DEPEND pugixml)
 endif()
 
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(amd64)|(AMD64)")
-  list(APPEND MI_DEPEND asmjit)
-endif()
+list(APPEND MI_DEPEND struct-jit)
 
 if (MI_ENABLE_EMBREE AND NOT MI_EXTERNAL_EMBREE)
   list(APPEND MI_DEPEND embree)
@@ -697,6 +722,11 @@ install(
 
 install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/mitsuba
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/struct-jit/include/struct-jit
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
@@ -789,15 +819,10 @@ target_include_directories(mitsuba
     $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/nanobind/include>
     $<BUILD_INTERFACE:${_MI_EXT}/drjit/ext/nanobind/ext/robin_map/include>
     $<BUILD_INTERFACE:${_MI_EXT}/fastfloat/include>
-    $<BUILD_INTERFACE:${_MI_EXT}/asmjit/src>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/mitsuba/ext>
 )
 unset(_MI_EXT)
-
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(amd64)|(AMD64)")
-  target_link_libraries(mitsuba INTERFACE asmjit)
-endif()
 
 # Install bundled ext headers that consumers need
 install(
@@ -828,10 +853,6 @@ install(
 )
 install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/fastfloat/include/fast_float
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-install(
-  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/asmjit/src/asmjit
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 

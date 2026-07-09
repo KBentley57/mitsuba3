@@ -161,8 +161,10 @@ static void set_variant(nb::args args) {
 
     if (!curr_variant.equal(old_variant)) {
         // Reload internal plugins
-        if (curr_variant.attr("startswith")(nb::make_tuple("llvm_", "cuda_"))) {
+        if (curr_variant.attr("startswith")(nb::make_tuple("llvm_", "cuda_", "metal_"))) {
             nb::module_ mi_python = nb::module_::import_("mitsuba.python.ad.integrators");
+            nb::steal(PyImport_ReloadModule(mi_python.ptr()));
+            mi_python = nb::module_::import_("mitsuba.python.ad.loaders");
             nb::steal(PyImport_ReloadModule(mi_python.ptr()));
         }
 

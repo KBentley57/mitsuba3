@@ -26,8 +26,6 @@ void dr_bind_vp_impl(nb::module_ &m, const std::string &prefix) {
         suffix += "f";
     else if constexpr (std::is_signed_v<dr::scalar_t<Type>>)
         suffix += "i";
-    else if constexpr (std::is_signed_v<dr::scalar_t<Type>>)
-        suffix += "i";
     else
         suffix += "u";
 
@@ -53,6 +51,8 @@ MI_PY_EXPORT(DrJit) {
         backend = "cuda";
     else if constexpr (dr::is_llvm_v<Float>)
         backend = "llvm";
+    else if constexpr (dr::is_metal_v<Float>)
+        backend = "metal";
 
     nb::module_ drjit         = nb::module_::import_("drjit"),
                 drjit_variant = drjit.attr(backend),
