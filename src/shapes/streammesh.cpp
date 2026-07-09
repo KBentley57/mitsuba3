@@ -113,7 +113,7 @@ public:
         m_vertex_positions = dr::load<FloatStorage>(vertices.get(), m_vertex_count * 3);
       }
 
-      if (in_normals) 
+      if (in_normals)
       {
         if (pretransformed && trust_normals) {
           if (!m_face_normals) {
@@ -139,7 +139,7 @@ public:
         }
       }
 
-      if (in_uvs) 
+      if (in_uvs)
       {
         std::unique_ptr<float[]> texcoords(new float[vertex_count * 2]);
         for (std::size_t i = 0; i < vertex_count; i++)

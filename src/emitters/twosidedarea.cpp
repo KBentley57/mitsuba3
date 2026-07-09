@@ -22,8 +22,8 @@ Area light (:monosp:`area`)
    - Specifies the emitted radiance in units of power per unit area per unit steradian.
    - |exposed|, |differentiable|
 
-This plugin implements an area light that emits on both sides, 
-i.e. a light source that emits diffuse illumination from the exterior of an 
+This plugin implements an area light that emits on both sides,
+i.e. a light source that emits diffuse illumination from the exterior of an
 arbitrary shape.  This is a direct extension of the normal area light.
 
 Since the emission profile of an area light is completely diffuse, it
@@ -160,8 +160,8 @@ public:
             Float abs_dp = dr::abs(dp);
             // Two-sided: only reject perfectly grazing cases
             active &= (abs_dp > 0.f);
-            
-            ds.pdf = dr::select(active, 
+
+            ds.pdf = dr::select(active,
                 pdf / dr::norm(dr::cross(si.dp_du, si.dp_dv)) *
                                         dist_squared / abs_dp, 0.f);
         }
