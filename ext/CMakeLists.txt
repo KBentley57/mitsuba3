@@ -288,20 +288,22 @@ mark_as_advanced(
 #  libpng
 # ----------------------------------------------------------
 
-set(PNG_SHARED ON CACHE BOOL " " FORCE)
-set(PNG_STATIC OFF CACHE BOOL " " FORCE)
-set(PNG_TESTS OFF CACHE BOOL " " FORCE)
-set(PNG_SKIP_INSTALL_ALL TRUE)
-if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-set(PNG_ARM_NEON "on" CACHE STRING " " FORCE)
-endif()
-add_subdirectory(libpng)
-set_property(TARGET png png_genfiles PROPERTY FOLDER "dependencies")
-set_property(TARGET png PROPERTY OUTPUT_NAME "png-mitsuba")
+if (NOT MI_EXTERNAL_PNG)
+  set(PNG_SHARED ON CACHE BOOL " " FORCE)
+  set(PNG_STATIC OFF CACHE BOOL " " FORCE)
+  set(PNG_TESTS OFF CACHE BOOL " " FORCE)
+  set(PNG_SKIP_INSTALL_ALL TRUE)
+  if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+    set(PNG_ARM_NEON "on" CACHE STRING " " FORCE)
+  endif()
+  add_subdirectory(libpng)
+  set_property(TARGET png png_genfiles PROPERTY FOLDER "dependencies")
+  set_property(TARGET png PROPERTY OUTPUT_NAME "png-mitsuba")
 
-set(PNG_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/libpng;${CMAKE_CURRENT_BINARY_DIR}/libpng" PARENT_SCOPE)
-set(PNG_LIBRARIES    "png" PARENT_SCOPE)
-set(PNG_DEFINES      -DMI_HAS_LIBPNG PARENT_SCOPE)
+  set(PNG_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/libpng;${CMAKE_CURRENT_BINARY_DIR}/libpng" PARENT_SCOPE)
+  set(PNG_LIBRARIES    "png" PARENT_SCOPE)
+  set(PNG_DEFINES      -DMI_HAS_LIBPNG PARENT_SCOPE)
+endif()
 
 mark_as_advanced(DFA_XTRA AWK PNG_FRAMEWORK PNG_HARDWARE_OPTIMIZATIONS
   PNG_PREFIX PNG_SHARED PNG_STATIC PNG_TESTS PNG_BUILD_ZLIB PNG_DEBUG
@@ -312,27 +314,29 @@ mark_as_advanced(DFA_XTRA AWK PNG_FRAMEWORK PNG_HARDWARE_OPTIMIZATIONS
 #  libjpeg-turbo (libjpeg-compatible API, SIMD-accelerated)
 # ----------------------------------------------------------
 
-# Build only the shared libjpeg-API library: no static lib, no high-level
-# TurboJPEG API, and no command-line tools / regression tests.
-set(ENABLE_SHARED   ON  CACHE BOOL " " FORCE)
-set(ENABLE_STATIC   OFF CACHE BOOL " " FORCE)
-set(WITH_TURBOJPEG  OFF CACHE BOOL " " FORCE)
-set(WITH_TOOLS      OFF CACHE BOOL " " FORCE)
-add_subdirectory(libjpeg-turbo)
-set_property(TARGET jpeg PROPERTY FOLDER "dependencies")
+if (NOT MI_EXTERNAL_JPEG)
+  # Build only the shared libjpeg-API library: no static lib, no high-level
+  # TurboJPEG API, and no command-line tools / regression tests.
+  set(ENABLE_SHARED   ON  CACHE BOOL " " FORCE)
+  set(ENABLE_STATIC   OFF CACHE BOOL " " FORCE)
+  set(WITH_TURBOJPEG  OFF CACHE BOOL " " FORCE)
+  set(WITH_TOOLS      OFF CACHE BOOL " " FORCE)
+  add_subdirectory(libjpeg-turbo)
+  set_property(TARGET jpeg PROPERTY FOLDER "dependencies")
 
-# Public headers live in src/; the generated jconfig.h lands in the build dir.
-set(JPEG_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/libjpeg-turbo/src;${CMAKE_CURRENT_BINARY_DIR}/libjpeg-turbo" PARENT_SCOPE)
-set(JPEG_LIBRARIES    "jpeg" PARENT_SCOPE)
-set(JPEG_DEFINES      -DMI_HAS_LIBJPEG PARENT_SCOPE)
+  # Public headers live in src/; the generated jconfig.h lands in the build dir.
+  set(JPEG_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/libjpeg-turbo/src;${CMAKE_CURRENT_BINARY_DIR}/libjpeg-turbo" PARENT_SCOPE)
+  set(JPEG_LIBRARIES    "jpeg" PARENT_SCOPE)
+  set(JPEG_DEFINES      -DMI_HAS_LIBJPEG PARENT_SCOPE)
 
-# Give libpng & libjpeg a name that's guaranteeed not to match other
-# libraries that may already be loaded (e.g. into a Python interpreter)
-set_property(TARGET jpeg PROPERTY OUTPUT_NAME "jpeg-mitsuba")
+  # Give libpng & libjpeg a name that's guaranteeed not to match other
+  # libraries that may already be loaded (e.g. into a Python interpreter)
+  set_property(TARGET jpeg PROPERTY OUTPUT_NAME "jpeg-mitsuba")
 
-# Write output to libjpeg-mitsuba.dylib (no version suffix or symlink)
-set_property(TARGET jpeg PROPERTY VERSION)
-set_property(TARGET jpeg PROPERTY SOVERSION)
+  # Write output to libjpeg-mitsuba.dylib (no version suffix or symlink)
+  set_property(TARGET jpeg PROPERTY VERSION)
+  set_property(TARGET jpeg PROPERTY SOVERSION)
+endif()
 
 mark_as_advanced(
   ENABLE_SHARED
