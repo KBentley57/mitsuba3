@@ -726,6 +726,11 @@ install(
 )
 
 install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ext/struct-jit/include/struct-jit
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(
   FILES ${TINYFORMAT_INCLUDE_DIRS}/tinyformat.h
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
