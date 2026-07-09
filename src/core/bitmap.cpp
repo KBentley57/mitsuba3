@@ -2632,7 +2632,7 @@ void Bitmap::read_tiff(Stream *stream) {
 
         m_size = Vector2u(width, height);
         m_pixel_format = PixelFormat::Y;
-        m_component_format = Struct::Type::Float32;
+        m_component_format = sj::Type::Float32;
         m_srgb_gamma = false;
         m_premultiplied_alpha = false;
         rebuild_struct();
@@ -2670,7 +2670,7 @@ void Bitmap::write_tiff(Stream *stream, int quality) const {
 
     if (m_pixel_format != PixelFormat::Y)
         Throw("write_tiff(): Only single-channel (Y) images are supported");
-    if (m_component_format != Struct::Type::Float32)
+    if (m_component_format != sj::Type::Float32)
         Throw("write_tiff(): Only 32-bit float format is supported");
 
     TIFFSetErrorHandler(tiff_error_handler);
