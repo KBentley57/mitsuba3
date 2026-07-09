@@ -216,7 +216,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"
 endif()
 
 if(MI_EXTERNAL_OPENEXR)
-  get_target_property(_openexr_inc OpenEXR::OpenEXR INTERFACE_INCLUDE_DIRECTORIES)
+  get_target_property(_openexr_inc ${MI_OPENEXR_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
   set(OPENEXR_INCLUDE_DIRS ${_openexr_inc} PARENT_SCOPE)
 else()
   # Prevents openexr to set the DEBUG_POSTFIX "_d"

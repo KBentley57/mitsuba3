@@ -88,7 +88,7 @@ target_link_libraries(mitsuba-core PUBLIC
 target_link_libraries(mitsuba-core PUBLIC struct-jit)
 
 if(MI_EXTERNAL_OPENEXR)
-  target_link_libraries(mitsuba-core PUBLIC OpenEXR::OpenEXR)
+  target_link_libraries(mitsuba-core PUBLIC ${MI_OPENEXR_TARGET})
 else()
   target_link_libraries(mitsuba-core PUBLIC IlmImf)
 endif()

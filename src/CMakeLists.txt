@@ -22,7 +22,7 @@ target_link_libraries(mitsuba PUBLIC
   fast_float)
 
 if(MI_EXTERNAL_OPENEXR)
-  target_link_libraries(mitsuba PUBLIC OpenEXR::OpenEXR)
+  target_link_libraries(mitsuba PUBLIC ${MI_OPENEXR_TARGET})
 else()
   target_link_libraries(mitsuba PUBLIC IlmImf)
 endif()
