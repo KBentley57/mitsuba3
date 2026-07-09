@@ -48,6 +48,7 @@ extern "C" {
 #include <ImfRgbaYca.h>
 #include <ImfOutputFile.h>
 #include <ImfChannelList.h>
+#include <ImfFrameBuffer.h>
 #include <ImfStringAttribute.h>
 #include <ImfIntAttribute.h>
 #include <ImfFloatAttribute.h>
@@ -908,11 +909,11 @@ public:
         return m_stream->tell() == m_size;
     }
 
-    Imf::Int64 tellg() override {
-        return m_stream->tell()-m_offset;
+    uint64_t tellg() override {
+        return (uint64_t) (m_stream->tell() - m_offset);
     }
 
-    void seekg(Imf::Int64 pos) override {
+    void seekg(uint64_t pos) override {
         m_stream->seek((size_t) pos + m_offset);
     }
 
@@ -928,8 +929,8 @@ public:
         m_stream(stream) { }
 
     void write(const char *c, int n) override { m_stream->write(c, n); }
-    Imf::Int64 tellp() override { return m_stream->tell(); }
-    void seekp(Imf::Int64 pos) override { m_stream->seek((size_t) pos); }
+    uint64_t tellp() override { return (uint64_t) m_stream->tell(); }
+    void seekp(uint64_t pos) override { m_stream->seek((size_t) pos); }
 private:
     ref<Stream> m_stream;
 };

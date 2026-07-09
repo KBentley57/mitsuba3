@@ -19,6 +19,7 @@ target_link_libraries(mitsuba PUBLIC
   PNG::PNG
   TIFF::TIFF
   drjit
+  struct-jit
   fast_float)
 
 if(MI_EXTERNAL_OPENEXR)
