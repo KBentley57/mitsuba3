@@ -1,6 +1,10 @@
 #include <mitsuba/render/texture.h>
 #include <mitsuba/render/interaction.h>
+#include <mitsuba/core/plugin.h>
 #include <mitsuba/core/properties.h>
+
+#include <algorithm>
+#include <cmath>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -31,13 +35,60 @@ Blackbody spectrum (:monosp:`blackbody`)
    - Name of a per-vertex scalar attribute (e.g. from a PLY) to use as temperature in Kelvins.
    - If specified, this bypasses the texture system and queries the shape attribute at the shading point.
 
+ * - emissivity
+   - |float| or |spectrum|
+   - Homogeneous surface emissivity. A float selects an explicit greybody fast path.
+   - A wavelength-dependent curve can be supplied inline or loaded from an ``.spd`` file
+   - using Mitsuba's standard spectrum syntax. Curve values are clamped to :math:`[0, 1]`
+   - and the curve must cover the complete ``wavelength_min`` to ``wavelength_max`` interval.
+   - (Default: 1.0)
+   - |exposed|, |differentiable|
+
  * - sampling_temperature
    - |float|
-   - Temperature (Kelvins) used to construct the spectral sampling distribution (PDF/CDF) and related
-   - quantities like :monosp:`max()`. This is intentionally decoupled from spatial temperature variation.
+   - Representative temperature (Kelvins) used by summary quantities such as
+   - :monosp:`mean()` and :monosp:`max()`. Wavelength sampling uses the local temperature.
    - Default: if :monosp:`temperature` is provided as a constant, that value; otherwise 300 K.
 
-This is a black body radiation spectrum for a specified temperature.
+This plugin models blackbody or greybody radiation for a specified temperature.
+For spectral radiance :math:`B_\lambda(T)` and emissivity
+:math:`\epsilon_\lambda`, the emitted radiance is
+
+.. math::
+
+    L_\lambda(T) = \epsilon_\lambda B_\lambda(T), \qquad
+    0 \leq \epsilon_\lambda \leq 1.
+
+A scalar ``emissivity`` is evaluated outside the wavelength-dependent path. A
+spectral curve remains wavelength-dependent even when its tabulated samples
+happen to be equal; there is intentionally no automatic flat-curve detection.
+The blackbody wavelength sampling distribution is not changed by emissivity.
+Instead, the Monte Carlo weight is multiplied by emissivity at the sampled
+wavelength, which is unbiased as long as the curve covers the configured
+wavelength interval.
+
+See :ref:`thermal-emission` for the complete radiometric model, conservation
+relationships, and sampling derivation.
+
+.. tabs::
+    .. code-tab:: xml
+        :name: blackbody-emissivity
+
+        <spectrum type="blackbody" name="radiance">
+            <float name="temperature" value="5000"/>
+            <spectrum name="emissivity" filename="materials/aluminum.spd"/>
+        </spectrum>
+
+    .. code-tab:: python
+
+        'radiance': {
+            'type': 'blackbody',
+            'temperature': 5000,
+            'emissivity': {
+                'type': 'spectrum',
+                'filename': 'materials/aluminum.spd'
+            }
+        }
 
 This spectrum type only makes sense for specifying emission and is unavailable
 in non-spectral rendering modes.
@@ -71,6 +122,51 @@ public:
             props.get<ScalarFloat>("wavelength_max", MI_CIE_MAX)
         );
 
+        if (!std::isfinite(m_wavelength_range.x()) ||
+            !std::isfinite(m_wavelength_range.y()) ||
+            m_wavelength_range.x() >= m_wavelength_range.y()) {
+            Throw("Blackbody wavelength range must be finite and increasing, got [%f, %f].",
+                  m_wavelength_range.x(), m_wavelength_range.y());
+        }
+
+        if (!props.has_property("emissivity")) {
+            m_emissivity_constant = dr::opaque<Float>(1.f);
+        } else if (props.type("emissivity") == Properties::Type::Float ||
+                   props.type("emissivity") == Properties::Type::Integer) {
+            ScalarFloat emissivity = props.get<ScalarFloat>("emissivity");
+            if (!std::isfinite(emissivity))
+                Throw("Blackbody emissivity must be finite, got %f.", emissivity);
+            m_emissivity_constant =
+                dr::opaque<Float>(dr::clip(emissivity, ScalarFloat(0.f), ScalarFloat(1.f)));
+        } else if (props.type("emissivity") == Properties::Type::Spectrum ||
+                   props.type("emissivity") == Properties::Type::Object) {
+            if (props.type("emissivity") == Properties::Type::Spectrum) {
+                Properties::Spectrum emissivity =
+                    props.get<Properties::Spectrum>("emissivity");
+                validate_emissivity_spectrum(emissivity);
+
+                // ContinuousDistribution rejects negative entries before eval()
+                // can clamp them, so physically bound raw inline/file samples
+                // before constructing the regular or irregular spectrum plugin.
+                for (double &value : emissivity.values)
+                    value = std::min(std::max(value, 0.0), 1.0);
+
+                Properties emissivity_props(
+                    emissivity.is_regular() ? "regular" : "irregular");
+                emissivity_props.set("value", std::move(emissivity));
+                m_emissivity_tex =
+                    PluginManager::instance()->create_object<Texture>(emissivity_props);
+            } else {
+                m_emissivity_tex = props.get_texture<Texture>("emissivity");
+            }
+
+            m_emissivity_is_constant = false;
+            validate_emissivity_texture();
+        } else {
+            Throw("Blackbody emissivity must be a float or spectrum, got %s.",
+                  property_type_name(props.type("emissivity")));
+        }
+
         m_use_attribute = props.has_property("temperature_attribute");
         if (m_use_attribute) {
             m_temperature_attribute = props.get<std::string>("temperature_attribute");
@@ -84,7 +180,8 @@ public:
 
             // Only read "temperature" as a scalar if it is a scalar
             if (props.has_property("temperature") &&
-                props.type("temperature") == Properties::Type::Float) {
+                (props.type("temperature") == Properties::Type::Float ||
+                 props.type("temperature") == Properties::Type::Integer)) {
                 default_temp = props.get<ScalarFloat>("temperature");
             }
 
@@ -106,9 +203,28 @@ public:
 
         callback->put("sampling_temperature", m_sampling_temperature,
                       ParamFlags::NonDifferentiable);
+
+        if (m_emissivity_is_constant)
+            callback->put("emissivity", m_emissivity_constant,
+                          ParamFlags::Differentiable);
+        else
+            callback->put("emissivity", m_emissivity_tex,
+                          ParamFlags::Differentiable);
     }
 
     void parameters_changed(const std::vector<std::string> &/*keys*/ = {}) override {
+        if (m_emissivity_is_constant) {
+            if constexpr (dr::is_jit_v<Float>) {
+                if (unlikely(m_emissivity_constant.size() != 1))
+                    Throw("Updated blackbody emissivity with a float of size %d",
+                          m_emissivity_constant.size());
+            }
+            m_emissivity_constant = dr::clip(m_emissivity_constant, 0.f, 1.f);
+            dr::make_opaque(m_emissivity_constant);
+        } else {
+            validate_emissivity_texture();
+        }
+
         std::tie(m_integral_min, m_integral) =
             integral_bounds(ScalarFloat(m_sampling_temperature));
     }
@@ -168,11 +284,20 @@ public:
         }
     }
 
+    /// Evaluate and physically bound homogeneous spectral surface emissivity.
+    UnpolarizedSpectrum emissivity_at_si(const SurfaceInteraction3f &si,
+                                         Mask active) const {
+        return dr::clip(m_emissivity_tex->eval(si, active), 0.f, 1.f);
+    }
+
     UnpolarizedSpectrum eval(const SurfaceInteraction3f &si, Mask active) const override {
         MI_MASKED_FUNCTION(ProfilerPhase::TextureEvaluate, active);
 
         UnpolarizedSpectrum temp_K = temperature_at_si(si, active);
-        return eval_impl(si.wavelengths, temp_K, active);
+        UnpolarizedSpectrum value = eval_impl(si.wavelengths, temp_K, active);
+        if (m_emissivity_is_constant)
+            return value * m_emissivity_constant;
+        return value * emissivity_at_si(si, active);
     }
 
     Wavelength pdf_spectrum(const SurfaceInteraction3f &si, Mask active_) const override {
@@ -288,7 +413,15 @@ public:
             } while (true);
 
             Wavelength pdf = deriv / integral;
-            UnpolarizedSpectrum val = eval_impl(t, UnpolarizedSpectrum(K), active_);
+            SurfaceInteraction3f si_sampled(si);
+            si_sampled.wavelengths = t;
+
+            UnpolarizedSpectrum val =
+                eval_impl(t, UnpolarizedSpectrum(K), active_);
+            if (m_emissivity_is_constant)
+                val *= m_emissivity_constant;
+            else
+                val *= emissivity_at_si(si_sampled, active_);
 
             return { t, val / pdf };
         } else {
@@ -298,7 +431,32 @@ public:
     }
 
     Float mean() const override {
-        return m_integral / (m_wavelength_range.y() - m_wavelength_range.x());
+        ScalarFloat width = m_wavelength_range.y() - m_wavelength_range.x();
+        if (m_emissivity_is_constant)
+            return m_emissivity_constant * m_integral / width;
+
+        // Simpson quadrature is only used for the infrequently queried mean().
+        // Rendering still evaluates the original spectral curve directly.
+        constexpr size_t interval_count = 64;
+        ScalarFloat step = width / ScalarFloat(interval_count);
+        Float integral = 0.f;
+        SurfaceInteraction3f si = dr::zeros<SurfaceInteraction3f>();
+
+        for (size_t i = 0; i <= interval_count; ++i) {
+            ScalarFloat wavelength = m_wavelength_range.x() + ScalarFloat(i) * step;
+            si.wavelengths = Wavelength(wavelength);
+
+            UnpolarizedSpectrum value =
+                eval_impl(si.wavelengths,
+                          UnpolarizedSpectrum(m_sampling_temperature), true) *
+                emissivity_at_si(si, true);
+            ScalarFloat coefficient =
+                (i == 0 || i == interval_count) ? ScalarFloat(1.f) :
+                (i & 1) ? ScalarFloat(4.f) : ScalarFloat(2.f);
+            integral += coefficient * dr::mean(value);
+        }
+
+        return integral * step / (ScalarFloat(3.f) * width);
     }
 
     ScalarVector2f wavelength_range() const override {
@@ -320,7 +478,13 @@ public:
         ScalarFloat P = 1e-9f * c0 / (lambda5_peak *
                     (dr::exp(c1 / (lambda_peak * m_sampling_temperature)) - 1.f));
 
-        return P;
+        ScalarFloat emissivity_max;
+        if (m_emissivity_is_constant)
+            emissivity_max = dr::slice(m_emissivity_constant);
+        else
+            emissivity_max = dr::clip(m_emissivity_tex->max(), 0.f, 1.f);
+
+        return P * emissivity_max;
     }
 
     std::string to_string() const override {
@@ -329,6 +493,11 @@ public:
             << "  wavelength_range = [" << m_wavelength_range.x()
             << ", " << m_wavelength_range.y() << "]," << std::endl
             << "  sampling_temperature = " << m_sampling_temperature << "," << std::endl;
+
+        if (m_emissivity_is_constant)
+            oss << "  emissivity = " << m_emissivity_constant << "," << std::endl;
+        else
+            oss << "  emissivity = " << string::indent(m_emissivity_tex) << "," << std::endl;
 
         if (m_use_attribute) {
             oss << "  temperature_attribute = \"" << m_temperature_attribute << "\"," << std::endl;
@@ -343,10 +512,61 @@ public:
     MI_DECLARE_CLASS(BlackBodySpectrum)
 
 private:
+    void validate_emissivity_spectrum(const Properties::Spectrum &emissivity) const {
+        if (emissivity.is_uniform())
+            Throw("A blackbody emissivity spectrum must define wavelength-value pairs. "
+                  "Use a float for constant emissivity.");
+
+        if (emissivity.wavelengths.size() < 2 ||
+            emissivity.wavelengths.size() != emissivity.values.size()) {
+            Throw("A blackbody emissivity spectrum must contain at least two "
+                  "wavelength-value pairs.");
+        }
+
+        for (size_t i = 0; i < emissivity.wavelengths.size(); ++i) {
+            if (!std::isfinite(emissivity.wavelengths[i]) ||
+                !std::isfinite(emissivity.values[i])) {
+                Throw("Blackbody emissivity wavelengths and values must be finite.");
+            }
+            if (i > 0 && emissivity.wavelengths[i] <= emissivity.wavelengths[i - 1])
+                Throw("Blackbody emissivity wavelengths must be strictly increasing.");
+        }
+
+        if (emissivity.wavelengths.front() > m_wavelength_range.x() ||
+            emissivity.wavelengths.back() < m_wavelength_range.y()) {
+            Throw("Blackbody emissivity spectrum range [%f, %f] does not cover "
+                  "the configured wavelength range [%f, %f].",
+                  emissivity.wavelengths.front(), emissivity.wavelengths.back(),
+                  m_wavelength_range.x(), m_wavelength_range.y());
+        }
+    }
+
+    void validate_emissivity_texture() const {
+        if (!m_emissivity_tex)
+            Throw("Blackbody emissivity texture is null.");
+        if (m_emissivity_tex->is_spatially_varying())
+            Throw("Blackbody spectral emissivity must be homogeneous; spatially "
+                  "varying emissivity textures are not supported.");
+
+        ScalarVector2f range = m_emissivity_tex->wavelength_range();
+        if (!std::isfinite(range.x()) || !std::isfinite(range.y()) ||
+            range.x() > m_wavelength_range.x() ||
+            range.y() < m_wavelength_range.y()) {
+            Throw("Blackbody emissivity spectrum range [%f, %f] does not cover "
+                  "the configured wavelength range [%f, %f].",
+                  range.x(), range.y(), m_wavelength_range.x(), m_wavelength_range.y());
+        }
+    }
+
     // Temperature source
     ref<Texture> m_temperature_tex;       // constant / bitmap path
     std::string  m_temperature_attribute; // vertex attribute name (Kelvins)
     bool         m_use_attribute = false;
+
+    // Homogeneous surface emissivity
+    ref<Texture> m_emissivity_tex;
+    Float        m_emissivity_constant = 1.f;
+    bool         m_emissivity_is_constant = true;
 
     // Sampling distribution temperature (Kelvins)
     ScalarFloat m_sampling_temperature = ScalarFloat(300.0);

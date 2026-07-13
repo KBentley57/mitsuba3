@@ -81,7 +81,7 @@ SPECTRUM_ORDERING = [
     'irregular',
     'srgb',
     'd65',
-    'blackbody'
+    'blackbody',
     'rawconstant'
 ]
 

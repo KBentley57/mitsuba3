@@ -268,8 +268,7 @@ by loading it from an external file:
 
 .. code-block:: xml
 
-    <spectrum name="color_property" filename="measured_spectrum.spd"/>         (Text)
-    <spectrum name="color_property" filename="measured_binary_spectrum.spb"/>  (Binary)
+    <spectrum name="color_property" filename="measured_spectrum.spd"/>
 
 
 The file should contain a single measurement per line, with the corresponding wavelength
