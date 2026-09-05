@@ -803,12 +803,47 @@ protected:
     /// inverses (2 x 12 floats each)
     DynamicBuffer<Float> m_instance_transforms;
 
+    /// Upper bound on the total number of instance keyframes in a scene. The
+    /// limit stems from the 32 bit index arithmetic of the vectorized
+    /// ``m_instance_kf_data`` lookup, which addresses ``KeyframeStride``
+    /// entries per keyframe.
+    static constexpr uint32_t MaxInstanceKeyframes = 0xFFFFFFFFu / KeyframeStride;
+
+    /// Per-instance animated keyframe data, populated only when at least one
+    /// instance has an animated ``to_world``. Concatenated ``KeyframeStride``
+    /// chunks written by ``pack_keyframe()``, i.e. AnimatedTransform's own
+    /// storage layout.
+    DynamicBuffer<Float> m_instance_kf_data;
+
+    /// Locates the keyframes of each instance within ``m_instance_kf_data``
+    /// and describes their uniform time grid. Four entries per instance:
+    ///
+    /// ``[t_min, 1 / t_step, base, k_max]``
+    ///
+    /// where ``base`` is the index of the instance's first keyframe and
+    /// ``k_max`` its keyframe count minus one (0 = static). The two indices
+    /// share the floating point buffer with the time grid so that a single
+    /// packet load retrieves the entire record; they are stored as raw bit
+    /// patterns (``dr::reinterpret_array``) rather than converted values,
+    /// which keeps the full integer range available.
+    DynamicBuffer<Float> m_instance_kf_meta;
+
+    /// Number of instances with a static ``to_world``.
+    size_t m_static_instance_count = 0;
+
     /// Instancing-aware expansion of a preliminary intersection (see
     /// ``compute_surface_interaction()``, which forwards here when the
     /// record may reference instanced geometry)
     SurfaceInteraction3f compute_surface_interaction_instanced(
         const Ray3f &ray, const PreliminaryIntersection3f &pi,
         uint32_t ray_flags, Mask active) const;
+
+    /// Evaluate instance ``i0`` (0-based) ``to_world`` at ``time``. Animated
+    /// instances interpolate their keyframes (matching the Embree/OptiX SRT
+    /// motion accel); static instances fall back to the differentiable matrix
+    /// in ``m_instance_transforms``.
+    AffineTransform4f eval_instance_to_world(const UInt32 &i0, const Float &time,
+                                             Mask active) const;
 
     // The Accel class needs to access the scene's protected members.
     friend SceneAccel<Float, Spectrum>;
@@ -819,7 +854,8 @@ protected:
                            m_children, m_integrator, m_environment,
                            m_emitter_pmf, m_emitter_distr, m_silhouette_shapes,
                            m_silhouette_shapes_dr, m_silhouette_distr,
-                           m_instance_transforms)
+                           m_instance_transforms, m_instance_kf_data,
+                           m_instance_kf_meta)
 };
 
 // See interaction.h
