@@ -119,3 +119,62 @@ absorption. A physically consistent SGX material should therefore provide both
 the BSDF model and the wavelength-dependent radiometric parameters, and should
 validate their conservation relationship before constructing the Mitsuba
 objects.
+
+Spectral sky and sun inputs
+--------------------------
+
+The :ref:`emitter-spectral_envmap` emitter represents a distant sky with a
+multi-channel equirectangular radiance map and an optional uniform sun disk.
+It reads supplied spectra; it does not compute an atmosphere or automatically
+invoke the blackbody plugin. A blackbody spectrum can be supplied explicitly
+as the sun input if that is the intended model.
+
+Map values are linear spectral radiance in
+:math:`\mathrm{W\,m^{-2}\,sr^{-1}\,nm^{-1}}`, sampled on a uniform wavelength
+grid in nanometers. The wavelength list maps positionally to the **loaded**
+Bitmap channels. Inspect ``bitmap.struct_()`` when loading named EXR channels:
+lexical channel ordering is not necessarily numeric wavelength ordering.
+There must be at least two wavelength channels, two columns, and three rows.
+
+Supply either ``sun_radiance`` in the same radiance units or
+``sun_irradiance`` in :math:`\mathrm{W\,m^{-2}\,nm^{-1}}`. The latter is direct
+irradiance on a plane normal to the sun direction. For angular radius
+:math:`\alpha`, the conversion is
+
+.. math::
+
+    E_\lambda = \int_{\text{disk}} L_\lambda \cos\theta\,d\omega
+               = L_\lambda\,\pi\sin^2\alpha.
+
+This uses projected solid angle, rather than the unprojected disk solid angle
+:math:`2\pi(1-\cos\alpha)`. The disk adds to the sky map, so remove any solar
+disk already present in the input if it should not be counted twice.
+
+Sky evaluation is zero outside the map's tabulated range. Sun evaluation is
+zero outside the range declared by its spectrum. For a ``uniform`` spectrum,
+set ``wavelength_min`` and ``wavelength_max`` explicitly when modeling infrared
+radiance; its default sampling range is visible. Emitted-ray wavelength
+sampling mixes the mean sky spectrum with a uniform proposal over the union
+of the two ranges, so sun-only wavelengths retain sampling support. Sensor
+wavelength sampling remains controlled by the sensor and film.
+
+``mi.traverse(emitter)['data']`` exposes a tensor with shape
+``(wavelength_count, height, width+2, 1)``. Edit columns ``1:-1`` and call
+``params.update()``. The emitter regenerates both periodic edge columns,
+preserves their gradient connection to the real columns, and rebuilds its
+sampling distributions. Spatial resolution can change; changing the wavelength
+grid requires a new emitter instance. A zero map is valid, including when the
+sun is the sole source of illumination.
+
+Camera motion
+-------------
+
+Use ``mi.AnimatedTransform4f`` for the camera's ``to_world`` and set a nonzero
+``shutter_open`` / ``shutter_close`` interval to integrate camera motion. The
+``spectral_envmap`` also evaluates its rotation at each ray's time, keeping the
+sky map and sun disk together. See :ref:`sec-animation` for keyframe syntax.
+
+The integration tests cover a moving camera observing stationary thermal
+geometry through the retained ``twosidedarea`` emitter. Moving emissive targets
+and atmospheric attenuation/path radiance between a target and sensor require
+separate modeling; the sky map does not perform that transport calculation.
