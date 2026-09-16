@@ -103,8 +103,31 @@ path is a symlink to the source checkout's `resources` directory.
   `find_package(mitsuba)` and `Mitsuba::mitsuba` compiled and passed the native
   streammesh regression against that install.
 
-CUDA/OptiX and Metal runtime behavior was not validated by this CPU/LLVM build.
-Backend-specific testing remains necessary before GPU deployment.
+### CUDA availability check
+
+A separate CUDA/OptiX configuration was created at
+`/data1/mitsuba3/build-spectral-motion-cuda`, using the same modules and GCC 14.
+The Dr.Jit runtime built successfully. A native initialization probe detected
+NVIDIA GeForce GTX 1080, compute capability 6.1, with driver 580.178.04
+(reporting CUDA driver API 13.0), then reported:
+
+```text
+Warning: compute capability of device too low (need >= 7.5), skipping ..
+CUDA backend available: false
+```
+
+The pinned Dr.Jit requires compute capability 7.5 or newer (Turing or later).
+This requirement is enforced in `ext/drjit/ext/drjit-core/src/cuda_core.cpp`;
+its bundled kernels also target `compute_75`, so removing the device check
+alone is insufficient. A newer driver or toolkit does not change the GPU's
+compute capability. No renderer or dependency compatibility checks were bypassed.
+
+The full GPU renderer build and rendering tests were therefore not run.
+GPU validation requires a supported GPU; retaining the GTX 1080 would require
+separately investigating an older compatible software stack. The tested
+CPU/LLVM build remains available. Metal runtime behavior is also unvalidated.
+The native probe and source are in the CUDA build directory; its output is in
+`/tmp/mitsuba-cuda-runtime-probe.log`.
 
 ## Test-data dependency
 
