@@ -11,13 +11,12 @@
 NAMESPACE_BEGIN(mitsuba)
 
 namespace {
-/// True if the shear component of a decomposition is significant relative to
-/// its scale
-template <typename Vector3>
-bool keyframe_has_shear(const Vector3 &S, const Vector3 &H) {
-    auto max_s = dr::maximum(dr::abs(S.x()),
-                             dr::maximum(dr::abs(S.y()), dr::abs(S.z())));
-    return dr::any_nested(dr::abs(H) > 1e-5f * max_s);
+/// Check for off-diagonal stretch relative to the largest scale component.
+template <typename Matrix3>
+bool keyframe_has_shear(const Matrix3 &S) {
+    auto scale = dr::diag(S);
+    return dr::any_nested(dr::abs(dr::plain_t<Matrix3>(S - dr::diag(scale))) >
+                          1e-5f * dr::max(dr::abs(scale)));
 }
 } // namespace
 
@@ -133,9 +132,9 @@ MI_VARIANT void AnimatedTransform<Float, Spectrum>::parameters_changed(
             // The user wrote m_transform in place through traversal. Refresh its
             // inverse transpose and re-derive the keyframe from it.
             m_transform = m_transform.value().update();
-            auto [S, H, Q, T] = transform_decompose_srt(m_transform.scalar().matrix);
-            m_keyframes[0].second = { S, Q, T };
-            m_has_shear = keyframe_has_shear(S, H);
+            auto [S, Q, T] = dr::transform_decompose(m_transform.scalar().matrix);
+            m_keyframes[0].second = { dr::diag(S), Q, T };
+            m_has_shear = keyframe_has_shear(S);
             // Refresh the packed buffer and views from the updated matrix.
             pack_data();
         } else {
@@ -153,9 +152,9 @@ MI_VARIANT void AnimatedTransform<Float, Spectrum>::parameters_changed(
 
 MI_VARIANT void AnimatedTransform<Float, Spectrum>::add_keyframe(
     ScalarFloat time, const ScalarAffineTransform4f &trafo) {
-    auto [S, H, Q, T] = transform_decompose_srt(trafo.matrix);
-    m_keyframes.push_back({ time, { S, Q, T } });
-    m_has_shear |= keyframe_has_shear(S, H);
+    auto [S, Q, T] = dr::transform_decompose(trafo.matrix);
+    m_keyframes.push_back({ time, { dr::diag(S), Q, T } });
+    m_has_shear |= keyframe_has_shear(S);
 }
 
 MI_VARIANT void AnimatedTransform<Float, Spectrum>::initialize() {

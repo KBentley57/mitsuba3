@@ -243,7 +243,7 @@ static MTLComponentTransform to_component_transform(const float to_world[12]) {
         for (size_t row = 0; row < 3; ++row)
             m(row, col) = to_world[col * 3 + row];
 
-    auto [S, H, Q, T] = transform_decompose_srt(m);
+    auto [S, H, Q, T] = dr::transform_decompose_qr(m);
 
     MTLComponentTransform ct = {};
     ct.scale = MTLPackedFloat3Make(S.x(), S.y(), S.z());

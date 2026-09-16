@@ -15476,17 +15476,6 @@ and avoid self-intersections. It covers two sources of rounding errors:
 ``mi.math.PositionEpsilon``, which is the variant-dependent unit roundoff
 times a safety factor.)doc";
 
-static const char *__doc_mitsuba_transform_decompose_srt =
-R"doc(Decompose an affine 4x4 matrix into scale (S), shear (H), rotation
-quaternion (Q), and translation (T)
-
-The result satisfies ``M = T * R(Q) * U(S, H)``, where ``U`` is the upper
-triangular matrix ``[[sx, hxy, hxz], [0, sy, hyz], [0, 0, sz]]``. This is the
-component form expected by Embree, OptiX and Metal.
-
-For transforms without shear, this uses Dr.Jit's polar decomposition. It
-otherwise falls back to an upper-triangular QR decomposition.)doc";
-
 static const char *__doc_mitsuba_tuple_hasher = R"doc()doc";
 
 static const char *__doc_mitsuba_tuple_hasher_operator_call = R"doc()doc";

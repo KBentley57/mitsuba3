@@ -121,7 +121,8 @@ def test08_shear(variant_scalar_rgb):
     at = mi.AnimatedTransform4f(trafo)
     assert dr.allclose(at.eval_scalar(0.0).matrix, m)
     assert at.has_shear()
-    assert not at.has_scale()
+    # Polar decomposition of shear also produces non-unit diagonal stretch.
+    assert at.has_scale()
 
     at = mi.AnimatedTransform4f({0.0: trafo})
     assert dr.allclose(at.eval_scalar(0.0).matrix, m)
@@ -511,10 +512,8 @@ def test31_negative_times(variant_scalar_rgb):
     lambda T: T().translate([1, 2, 3]).rotate([1, 0, 0], 90).scale([2, -3, 4]),
 ])
 def test32_mirroring_decomposition(variant_scalar_rgb, trafo_fn):
-    # A negative determinant makes the polar decomposition fold the reflection
-    # into the rotation, which can turn it into a 180 degree rotation whose
-    # quaternion cannot be recovered robustly. Such keyframes must therefore
-    # round-trip through the QR decomposition instead.
+    # Reflections must round-trip through polar decomposition and quaternion
+    # conversion without corrupting the rotation.
     trafo = trafo_fn(mi.ScalarAffineTransform4f)
     at = mi.AnimatedTransform4f({0.0: trafo, 1.0: trafo})
     for t in [0.0, 0.5, 1.0]:
