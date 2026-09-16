@@ -107,7 +107,9 @@ mark_as_advanced(
 #  Compile Intel Embree (optional)
 # ----------------------------------------------------------
 
-if (MI_ENABLE_EMBREE)
+if (MI_ENABLE_EMBREE AND MI_EXTERNAL_EMBREE)
+  set(EMBREE_INCLUDE_DIRS "${EMBREE_INCLUDE_DIRS}" PARENT_SCOPE)
+elseif (MI_ENABLE_EMBREE)
   set_directory_properties(PROPERTIES COMPILE_OPTIONS "")
   set(CMAKE_CXX_FLAGS "${MI_EXT_CXX_FLAGS_NOWARN}")
 
@@ -175,7 +177,7 @@ if (MI_ENABLE_EMBREE)
   set_property(TARGET
     lexers math simd sys tasking embree ${EMBREE_TARGET}
     PROPERTY FOLDER "dependencies/embree")
-endif()
+endif()  # MI_ENABLE_EMBREE
 
 mark_as_advanced(FORCE EMBREE_ADDRESS_SANITIZER EMBREE_API_NAMESPACE
   EMBREE_BACKFACE_CULLING EMBREE_COMPACT_POLYS
@@ -228,51 +230,56 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"
   add_compile_options(-Wno-unused-parameter -Wno-unused-but-set-variable -Wno-sign-compare)
 endif()
 
-# Prevents openexr to set the DEBUG_POSTFIX "_d"
-set(CMAKE_DEBUG_POSTFIX "" CACHE STRING " " FORCE)
-set(ILMBASE_LIB_SUFFIX  "" CACHE STRING "" FORCE)
-set(OPENEXR_LIB_SUFFIX  "" CACHE STRING "" FORCE)
-set(OPENEXR_BUILD_UTILS        OFF CACHE BOOL "" FORCE)
-set(ILMBASE_INSTALL_PKG_CONFIG OFF CACHE BOOL "" FORCE)
-set(OPENEXR_INSTALL_PKG_CONFIG OFF CACHE BOOL "" FORCE)
-set(PYILMBASE_ENABLE           OFF CACHE BOOL "" FORCE)
-set(INSTALL_OPENEXR_DOCS OFF CACHE BOOL "" FORCE)
-set(INSTALL_OPENEXR_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+if(MI_EXTERNAL_OPENEXR)
+  get_target_property(_openexr_inc ${MI_OPENEXR_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+  set(OPENEXR_INCLUDE_DIRS ${_openexr_inc} PARENT_SCOPE)
+else()
+  # Prevents openexr to set the DEBUG_POSTFIX "_d"
+  set(CMAKE_DEBUG_POSTFIX "" CACHE STRING " " FORCE)
+  set(ILMBASE_LIB_SUFFIX  "" CACHE STRING "" FORCE)
+  set(OPENEXR_LIB_SUFFIX  "" CACHE STRING "" FORCE)
+  set(OPENEXR_BUILD_UTILS        OFF CACHE BOOL "" FORCE)
+  set(ILMBASE_INSTALL_PKG_CONFIG OFF CACHE BOOL "" FORCE)
+  set(OPENEXR_INSTALL_PKG_CONFIG OFF CACHE BOOL "" FORCE)
+  set(PYILMBASE_ENABLE           OFF CACHE BOOL "" FORCE)
+  set(INSTALL_OPENEXR_DOCS OFF CACHE BOOL "" FORCE)
+  set(INSTALL_OPENEXR_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 
-unset(CMAKE_CXX_VISIBILITY_PRESET)
-add_subdirectory(openexr)
-set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
+  unset(CMAKE_CXX_VISIBILITY_PRESET)
+  add_subdirectory(openexr)
+  set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
 
-if (MSVC)
-  target_compile_options(Half PRIVATE /W2)
-  target_compile_options(IlmThread PRIVATE /W2)
-  target_compile_options(Imath PRIVATE /W2)
-  target_compile_options(IlmImf PRIVATE /W1)
+  if (MSVC)
+    target_compile_options(Half PRIVATE /W2)
+    target_compile_options(IlmThread PRIVATE /W2)
+    target_compile_options(Imath PRIVATE /W2)
+    target_compile_options(IlmImf PRIVATE /W1)
+  endif()
+
+  set_property(TARGET
+    IexMath IlmThread Half Iex Imath IlmImf IexMath IlmImfUtil
+    PROPERTY FOLDER "dependencies/openexr")
+
+  set_property(TARGET
+    IexMath IlmThread Half Iex Imath IlmImf IexMath
+    PROPERTY PUBLIC_HEADER "")
+
+  foreach(X IexMath IlmThread Half Iex Imath IlmImf IexMath IlmImfUtil)
+    set_property(TARGET ${X} PROPERTY OUTPUT_NAME "${X}-mitsuba")
+  endforeach()
+
+  set(OPENEXR_INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Imath
+    ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Imath
+    ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Imath
+    ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Iex
+    ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Half
+    ${CMAKE_CURRENT_SOURCE_DIR}/openexr/OpenEXR/IlmImf
+    ${CMAKE_CURRENT_BINARY_DIR}/openexr/OpenEXR/config
+    ${CMAKE_CURRENT_BINARY_DIR}/openexr/IlmBase/config
+    PARENT_SCOPE)
 endif()
-
-set_property(TARGET
-  IexMath IlmThread Half Iex Imath IlmImf IexMath IlmImfUtil
-  PROPERTY FOLDER "dependencies/openexr")
-
-set_property(TARGET
-  IexMath IlmThread Half Iex Imath IlmImf IexMath
-  PROPERTY PUBLIC_HEADER "")
-
-foreach(X IexMath IlmThread Half Iex Imath IlmImf IexMath IlmImfUtil)
-  set_property(TARGET ${X} PROPERTY OUTPUT_NAME "${X}-mitsuba")
-endforeach()
-
-set(OPENEXR_INCLUDE_DIRS
-  ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Imath
-  ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Imath
-  ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Imath
-  ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Iex
-  ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Half
-  ${CMAKE_CURRENT_SOURCE_DIR}/openexr/OpenEXR/IlmImf
-  ${CMAKE_CURRENT_BINARY_DIR}/openexr/OpenEXR/config
-  ${CMAKE_CURRENT_BINARY_DIR}/openexr/IlmBase/config
-  PARENT_SCOPE)
 
 mark_as_advanced(
   ILMBASE_BUILD_BOTH_STATIC_SHARED ILMBASE_ENABLE_LARGE_STACK
@@ -296,20 +303,22 @@ mark_as_advanced(
 #  libpng
 # ----------------------------------------------------------
 
-set(PNG_SHARED ON CACHE BOOL " " FORCE)
-set(PNG_STATIC OFF CACHE BOOL " " FORCE)
-set(PNG_TESTS OFF CACHE BOOL " " FORCE)
-set(PNG_SKIP_INSTALL_ALL TRUE)
-if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-set(PNG_ARM_NEON "on" CACHE STRING " " FORCE)
-endif()
-add_subdirectory(libpng)
-set_property(TARGET png png_genfiles PROPERTY FOLDER "dependencies")
-set_property(TARGET png PROPERTY OUTPUT_NAME "png-mitsuba")
+if (NOT MI_EXTERNAL_PNG)
+  set(PNG_SHARED ON CACHE BOOL " " FORCE)
+  set(PNG_STATIC OFF CACHE BOOL " " FORCE)
+  set(PNG_TESTS OFF CACHE BOOL " " FORCE)
+  set(PNG_SKIP_INSTALL_ALL TRUE)
+  if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+    set(PNG_ARM_NEON "on" CACHE STRING " " FORCE)
+  endif()
+  add_subdirectory(libpng)
+  set_property(TARGET png png_genfiles PROPERTY FOLDER "dependencies")
+  set_property(TARGET png PROPERTY OUTPUT_NAME "png-mitsuba")
 
-set(PNG_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/libpng;${CMAKE_CURRENT_BINARY_DIR}/libpng" PARENT_SCOPE)
-set(PNG_LIBRARIES    "png" PARENT_SCOPE)
-set(PNG_DEFINES      -DMI_HAS_LIBPNG PARENT_SCOPE)
+  set(PNG_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/libpng;${CMAKE_CURRENT_BINARY_DIR}/libpng" PARENT_SCOPE)
+  set(PNG_LIBRARIES    "png" PARENT_SCOPE)
+  set(PNG_DEFINES      -DMI_HAS_LIBPNG PARENT_SCOPE)
+endif()
 
 mark_as_advanced(DFA_XTRA AWK PNG_FRAMEWORK PNG_HARDWARE_OPTIMIZATIONS
   PNG_PREFIX PNG_SHARED PNG_STATIC PNG_TESTS PNG_BUILD_ZLIB PNG_DEBUG
@@ -320,36 +329,38 @@ mark_as_advanced(DFA_XTRA AWK PNG_FRAMEWORK PNG_HARDWARE_OPTIMIZATIONS
 #  libjpeg-turbo (libjpeg-compatible API, SIMD-accelerated)
 # ----------------------------------------------------------
 
-# Build only the shared libjpeg-API library: no static lib, no high-level
-# TurboJPEG API, and no command-line tools / regression tests.
-set(ENABLE_SHARED   ON  CACHE BOOL " " FORCE)
-set(ENABLE_STATIC   OFF CACHE BOOL " " FORCE)
-set(WITH_TURBOJPEG  OFF CACHE BOOL " " FORCE)
-set(WITH_TOOLS      OFF CACHE BOOL " " FORCE)
+if (NOT MI_EXTERNAL_JPEG)
+  # Build only the shared libjpeg-API library: no static lib, no high-level
+  # TurboJPEG API, and no command-line tools / regression tests.
+  set(ENABLE_SHARED   ON  CACHE BOOL " " FORCE)
+  set(ENABLE_STATIC   OFF CACHE BOOL " " FORCE)
+  set(WITH_TURBOJPEG  OFF CACHE BOOL " " FORCE)
+  set(WITH_TOOLS      OFF CACHE BOOL " " FORCE)
 
-# Use the dynamic MSVC runtime like every other part of the build. The default
-# would force ``/MT`` on top of the inherited ``/MD``.
-set(WITH_CRT_DLL    ON  CACHE BOOL " " FORCE)
+  # Use the dynamic MSVC runtime like every other part of the build. The default
+  # would force ``/MT`` on top of the inherited ``/MD``.
+  set(WITH_CRT_DLL    ON  CACHE BOOL " " FORCE)
 
-# libjpeg-turbo caps its policy range at CMake 3.28, leaving CMP0219 unset and
-# warning. cmake_policy(SET) would not survive its cmake_minimum_required().
-set(CMAKE_POLICY_DEFAULT_CMP0219 NEW)
-add_subdirectory(libjpeg-turbo)
-unset(CMAKE_POLICY_DEFAULT_CMP0219)
-set_property(TARGET jpeg PROPERTY FOLDER "dependencies")
+  # libjpeg-turbo caps its policy range at CMake 3.28, leaving CMP0219 unset and
+  # warning. cmake_policy(SET) would not survive its cmake_minimum_required().
+  set(CMAKE_POLICY_DEFAULT_CMP0219 NEW)
+  add_subdirectory(libjpeg-turbo)
+  unset(CMAKE_POLICY_DEFAULT_CMP0219)
+  set_property(TARGET jpeg PROPERTY FOLDER "dependencies")
 
-# Public headers live in src/; the generated jconfig.h lands in the build dir.
-set(JPEG_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/libjpeg-turbo/src;${CMAKE_CURRENT_BINARY_DIR}/libjpeg-turbo" PARENT_SCOPE)
-set(JPEG_LIBRARIES    "jpeg" PARENT_SCOPE)
-set(JPEG_DEFINES      -DMI_HAS_LIBJPEG PARENT_SCOPE)
+  # Public headers live in src/; the generated jconfig.h lands in the build dir.
+  set(JPEG_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/libjpeg-turbo/src;${CMAKE_CURRENT_BINARY_DIR}/libjpeg-turbo" PARENT_SCOPE)
+  set(JPEG_LIBRARIES    "jpeg" PARENT_SCOPE)
+  set(JPEG_DEFINES      -DMI_HAS_LIBJPEG PARENT_SCOPE)
 
-# Give libpng & libjpeg a name that's guaranteeed not to match other
-# libraries that may already be loaded (e.g. into a Python interpreter)
-set_property(TARGET jpeg PROPERTY OUTPUT_NAME "jpeg-mitsuba")
+  # Give libpng & libjpeg a name that's guaranteeed not to match other
+  # libraries that may already be loaded (e.g. into a Python interpreter)
+  set_property(TARGET jpeg PROPERTY OUTPUT_NAME "jpeg-mitsuba")
 
-# Write output to libjpeg-mitsuba.dylib (no version suffix or symlink)
-set_property(TARGET jpeg PROPERTY VERSION)
-set_property(TARGET jpeg PROPERTY SOVERSION)
+  # Write output to libjpeg-mitsuba.dylib (no version suffix or symlink)
+  set_property(TARGET jpeg PROPERTY VERSION)
+  set_property(TARGET jpeg PROPERTY SOVERSION)
+endif()
 
 mark_as_advanced(
   ENABLE_SHARED
@@ -363,13 +374,18 @@ mark_as_advanced(
 #  pugixml XML parser
 # ----------------------------------------------------------
 
-add_library(pugixml SHARED pugixml/src/pugixml.cpp)
-set_property(TARGET pugixml PROPERTY
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pugixml")
-set_property(TARGET pugixml PROPERTY FOLDER "dependencies")
-set(PUGIXML_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/pugixml/src PARENT_SCOPE)
-target_compile_options(pugixml PRIVATE -DPUGIXML_BUILD_DLL)
-target_compile_features(pugixml PUBLIC cxx_std_17)
+if(MI_EXTERNAL_PUGIXML)
+  get_target_property(_pugixml_inc pugixml::pugixml INTERFACE_INCLUDE_DIRECTORIES)
+  set(PUGIXML_INCLUDE_DIRS ${_pugixml_inc} PARENT_SCOPE)
+else()
+  add_library(pugixml SHARED pugixml/src/pugixml.cpp)
+  set_property(TARGET pugixml PROPERTY
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pugixml")
+  set_property(TARGET pugixml PROPERTY FOLDER "dependencies")
+  set(PUGIXML_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/pugixml/src PARENT_SCOPE)
+  target_compile_options(pugixml PRIVATE -DPUGIXML_BUILD_DLL)
+  target_compile_features(pugixml PUBLIC cxx_std_17)
+endif()
 
 # tinyformat include path
 set(TINYFORMAT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/tinyformat PARENT_SCOPE)
@@ -424,7 +440,11 @@ mark_as_advanced(
 #  Nanobind headers
 # ----------------------------------------------------------
 
-set(NANOBIND_INCLUDE_DIRS ${NB_DIR}/include PARENT_SCOPE)
+if(MI_EXTERNAL_NANOBIND)
+  set(NANOBIND_INCLUDE_DIRS ${nanobind_INCLUDE_DIR} PARENT_SCOPE)
+else()
+  set(NANOBIND_INCLUDE_DIRS ${NB_DIR}/include PARENT_SCOPE)
+endif()
 
 # ----------------------------------------------------------
 #  Hide a few more settings that aren't relevant for users

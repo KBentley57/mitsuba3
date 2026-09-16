@@ -1,11 +1,29 @@
 #include <mitsuba/core/fresolver.h>
 #include <sstream>
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
+
+#define XSTR(x) #x
+#define STR(x) XSTR(x)
 
 NAMESPACE_BEGIN(mitsuba)
 
-FileResolver::FileResolver() : Object() {
+FileResolver::FileResolver()
+    : Object() {
     m_paths.push_back(fs::current_path());
+
+    #ifdef SUPPORTPACKAGES_MITSUBA_PLUGIN_PATH
+        m_paths.push_back(STR(SUPPORTPACKAGES_MITSUBA_PLUGIN_PATH));
+    #endif
+
+    if (const char* env_p = std::getenv("MI_PLUGINS_PATH")) {
+        if (fs::exists(env_p)) {
+            m_paths.push_back(env_p);
+        } else {
+            std::cerr << "Path does not exist. Check path in env(MI_PLUGINS_PATH)\n";
+        }
+    }
 }
 
 FileResolver::FileResolver(const FileResolver &fr)

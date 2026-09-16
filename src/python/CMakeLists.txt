@@ -58,7 +58,7 @@ foreach (MI_VARIANT ${MI_VARIANTS})
   )
 
   install(TARGETS ${TARGET_NAME}
-      LIBRARY DESTINATION mitsuba
+      LIBRARY DESTINATION ${MI_MITSUBA_PY_DEST}
   )
 endforeach()
 
@@ -72,7 +72,7 @@ if (NOT MI_SPLIT_MODE)
     FOLDER python
   )
   install(TARGETS nanobind
-    LIBRARY DESTINATION mitsuba
+    LIBRARY DESTINATION ${MI_MITSUBA_PY_DEST}
   )
 endif()
 
@@ -104,7 +104,7 @@ set_target_properties(mitsuba_ext
 )
 
 install(TARGETS mitsuba_ext
-  LIBRARY DESTINATION mitsuba
+  LIBRARY DESTINATION ${MI_MITSUBA_PY_DEST}
 )
 
 # ----------------------------------------------------------
@@ -118,7 +118,7 @@ foreach(file ${MI_PYTHON_FILES})
   get_filename_component(IN_FILE_DIR ${file} DIRECTORY)
   set(IN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/${file})
   ro_copy(${IN_FILE} python/mitsuba/${file})
-  install(FILES ${IN_FILE} DESTINATION mitsuba/${IN_FILE_DIR})
+  install(FILES ${IN_FILE} DESTINATION ${MI_MITSUBA_PY_DEST}/${IN_FILE_DIR})
 endforeach()
 
 # ----------------------------------------------------------
@@ -127,7 +127,7 @@ endforeach()
 
 install(
   FILES ${CMAKE_CURRENT_BINARY_DIR}/../../python/mitsuba/config.py
-  DESTINATION mitsuba
+  DESTINATION ${MI_MITSUBA_PY_DEST}
 )
 
 if (MSVC)
@@ -286,7 +286,7 @@ if (NOT (MI_SANITIZE_ADDRESS OR MI_SANITIZE_MEMORY))
   foreach (stub ${MI_STUB_TARGET_DEPS})
     file(RELATIVE_PATH rel "${MI_BINARY_DIR}/python/mitsuba" "${stub}")
     get_filename_component(dir "${rel}" DIRECTORY)
-    install(FILES ${stub} DESTINATION mitsuba/${dir})
+    install(FILES ${stub} DESTINATION ${MI_MITSUBA_PY_DEST}/${dir})
   endforeach()
 endif()
 

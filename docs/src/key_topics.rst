@@ -21,6 +21,7 @@ Topics
 
     key_topics/variants
     key_topics/scene_format
+    key_topics/thermal_emission
     key_topics/differences
     key_topics/polarization
     key_topics/animation

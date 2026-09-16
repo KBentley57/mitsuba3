@@ -20,6 +20,7 @@ add_plugin(merge        merge.cpp)
 
 add_plugin(ellipsoids ellipsoids.cpp)
 add_plugin(ellipsoidsmesh ellipsoidsmesh.cpp)
+add_plugin(streammesh   streammesh.cpp)
 
 if (MI_ENABLE_EMBREE)
     target_link_libraries(sphere   PRIVATE embree)
