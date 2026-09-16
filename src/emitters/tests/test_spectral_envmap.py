@@ -231,3 +231,19 @@ def test_lwir_render_sees_sky_and_sun(variants_all_spectral):
         })
         value = float(np.array(mi.render(scene, seed=7, spp=16)).item())
         assert np.isclose(value, expected, rtol=1e-5)
+
+
+def test_scale_update_preserves_gradient(variant_llvm_ad_spectral):
+    e = emitter()
+    params = mi.traverse(e)
+    scale = mi.Float(2)
+    dr.enable_grad(scale)
+    params['scale'] = scale
+    params.update()
+    value = e.eval(interaction())[0]
+    assert dr.allclose(value, 2)
+    dr.backward(value)
+    assert dr.allclose(dr.grad(scale), 1)
+    params['scale'] = 0
+    params.update()
+    assert dr.allclose(e.eval(interaction()), 0)

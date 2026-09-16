@@ -183,7 +183,7 @@ public:
         }
 
         // The records arrived in bulk, so they are transformed after the fact
-        pm.set_transform(m_to_world->eval_scalar(), m_flip_normals);
+        pm.set_transform(m_to_world->eval_scalar(0.f), m_flip_normals);
         m_flip_normals = false;
         m_to_world = new AnimatedTransform4f();
         pm.transform_records();

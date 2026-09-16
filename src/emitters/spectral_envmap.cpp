@@ -298,7 +298,7 @@ public:
             m_texture = Tex(tensor, /* use_accel = */ true,
                             dr::FilterMode::Linear, dr::WrapMode::Clamp);
 
-            m_scale = checked_scale(props, "scale");
+            m_scale = dr::opaque<Float>(checked_scale(props, "scale"));
             m_sampling_min = m_wavelength_min;
             m_sampling_max = m_wavelength_max;
             m_mis_compensation = props.get<bool>("mis_compensation", false);
@@ -441,6 +441,7 @@ public:
                 dr::sync_thread();
             rebuild_distributions(refreshed.data());
         }
+        dr::make_opaque(m_scale);
         Base::parameters_changed(keys);
     }
 
