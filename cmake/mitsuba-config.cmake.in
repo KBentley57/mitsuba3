@@ -8,6 +8,10 @@ find_dependency(JPEG REQUIRED)
 find_dependency(PNG REQUIRED)
 find_dependency(TIFF REQUIRED)
 
+# Prefer package configs for OpenEXR's transitive IlmBase/Imath dependencies;
+# consumer-provided Find modules may describe a different installed version.
+set(_mitsuba_old_prefer_config ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})
+set(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
 if(@MI_EXTERNAL_OPENEXR@)
   find_dependency(OpenEXR CONFIG QUIET)
   if(NOT TARGET OpenEXR::OpenEXR AND NOT TARGET OpenEXR::IlmImf)
@@ -16,13 +20,11 @@ if(@MI_EXTERNAL_OPENEXR@)
   endif()
 else()
   # Bundled OpenEXR/IlmBase install their own cmake targets separately.
-  set(_mitsuba_old_prefer_config ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})
-  set(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
   find_dependency(IlmBase CONFIG REQUIRED)
   find_dependency(OpenEXR CONFIG REQUIRED)
-  set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_mitsuba_old_prefer_config})
-  unset(_mitsuba_old_prefer_config)
 endif()
+set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_mitsuba_old_prefer_config})
+unset(_mitsuba_old_prefer_config)
 
 if(@MI_EXTERNAL_PUGIXML@)
   find_dependency(pugixml REQUIRED)

@@ -136,3 +136,34 @@ master's current assets and the motion-blur scenes. Unlike the previous
 integration, it requires no unpublished data-submodule merge commit.
 
 No remote branches or installed SGX release files were changed.
+
+
+## Distribution 3.10.0.2: SGX consumer integration
+
+This follow-up to distribution 3.10.0.1 preserves the renderer, custom emitters,
+camera-motion implementation, and all dependency pins. The upstream source
+version remains 3.10.0.dev1.
+
+- Export enabled CUDA/LLVM/Metal/Embree/AD/JIT/Python capability definitions on
+  `Mitsuba::mitsuba`, using the same definitions for the implementation objects.
+  Disabled capabilities remain undefined and internal build macros remain private.
+- Prefer dependency config packages while resolving OpenEXR and its transitive
+  IlmBase/Imath dependencies, restoring the consumer's preference afterward.
+  This avoids selecting mismatched consumer-supplied Find modules.
+
+The GCC 14 Release SDK was rebuilt and installed into the isolated prefix.
+The SGX integration branch built and passed all 18 SGX CTest cases, including
+native scalar/LLVM camera-motion and spectral sky/sun tests. Additional native
+checks verified disk size, orientation, irradiance/radiance equivalence, EXR
+channel mapping, and failed-render recovery. Nine standalone thermal tests
+also passed. An installed downstream consumer linking only
+`SGX::mitsuba_plugin` compiled with inherited Mitsuba capabilities and ran
+against this SDK; no manual MI_ENABLE definitions were supplied.
+
+These checks supplement the original 766-test renderer integration run above;
+that entire renderer suite was not rerun for these CMake-only changes. CUDA
+and interactive SGX editor workflows were not validated in this follow-up.
+
+Keep MI_SPLIT_MODE=OFF with the current SupportPackages recipe. Distribution
+3.10.0.1 and its tag remain unchanged; this revision includes the companion
+export patch previously recorded in SGX's integration notes.

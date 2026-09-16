@@ -11,6 +11,18 @@ add_subdirectory(render)
 add_library(mitsuba SHARED)
 target_link_libraries(mitsuba PRIVATE mitsuba-core mitsuba-render)
 
+# Public headers and external consumers must see the capabilities of this build.
+# Keep disabled capabilities undefined (callers use #ifdef), and keep internal
+# MI_BUILD_MODULE/export flags private to the implementation targets.
+foreach(feature CUDA LLVM METAL EMBREE AUTODIFF JIT PYTHON)
+  if(MI_ENABLE_${feature})
+    target_compile_definitions(mitsuba PUBLIC MI_ENABLE_${feature}=1)
+    target_compile_definitions(mitsuba-core PRIVATE MI_ENABLE_${feature}=1)
+    target_compile_definitions(mitsuba-render PRIVATE MI_ENABLE_${feature}=1)
+  endif()
+endforeach()
+
+
 # Re-export the PUBLIC deps from the OBJECT libs onto `mitsuba` itself so
 # they appear in MitsubaTargets.cmake (without the OBJECT libs themselves).
 target_link_libraries(mitsuba PUBLIC
