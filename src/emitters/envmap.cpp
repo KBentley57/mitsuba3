@@ -202,7 +202,7 @@ public:
         m_texture = Tex(tensor, /* use_accel = */ true,
                         dr::FilterMode::Linear, dr::WrapMode::Clamp);
 
-        m_scale = props.get<ScalarFloat>("scale", 1.f);
+        m_scale = dr::opaque<Float>(props.get<ScalarFloat>("scale", 1.f));
         m_mis_compensation = props.get<bool>("mis_compensation", false);
         m_d65 = Texture::D65(1.f);
         m_flags = EmitterFlags::Infinite | EmitterFlags::SpatiallyVarying;
@@ -264,6 +264,7 @@ public:
 
             rebuild_distribution((ScalarFloat *) data.data());
         }
+        dr::make_opaque(m_scale);
         Base::parameters_changed(keys);
     }
 
