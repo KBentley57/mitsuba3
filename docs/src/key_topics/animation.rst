@@ -20,7 +20,7 @@ interpolates scale and translation.
 In XML, an animation replaces the ``<transform>`` tag. In Python, an animated
 transformation is specified by passing a :py:class:`mitsuba.AnimatedTransform4f`
 (constructed from a dictionary of timestamp-transform pairs or a list of
-``(time, transform)`` tuples) wherever a transform is expected:
+``(time, transform)`` tuples) wherever a transform is expected.
 
 .. tabs::
     .. code-tab:: xml
@@ -45,7 +45,7 @@ An ``<animation>`` can carry an ``id`` to be shared across objects via
 ``<ref>`` (see :ref:`sec-file-format`).
 
 Keyframe times must be **strictly increasing**. Animations only support affine
-transformations **without shear**; multi-keyframe animations containing shear
+transformations **without shear**. Multi-keyframe animations containing shear
 will raise an error. Constant (single-keyframe) transformations are evaluated as
 plain matrices and may contain shear.
 
@@ -56,7 +56,7 @@ The shutter interval
 --------------------
 
 To render motion blur, the sensor must specify an active shutter interval via
-two parameters:
+two parameters.
 
 .. list-table::
     :header-rows: 1
@@ -111,15 +111,14 @@ What can be animated
       - Requires **evenly spaced** keyframes, see
         :ref:`below <sec-animation-shapes>`.
 
-Deforming geometry is not supported: only rigid and affine transformations of
-whole objects (scale, rotation, translation) can be animated and individual
-vertex positions cannot vary over time.
+Only rigid and affine transformations of whole objects (scale, rotation,
+translation) can be animated. Deforming geometry is not supported.
 
 Animated sensors
 ----------------
 
 The ``perspective``, ``thinlens``, ``orthographic``, ``radiancemeter``, and
-``distant`` sensors all support animated ``to_world`` transformations:
+``distant`` sensors all support animated ``to_world`` transformations.
 
 .. tabs::
     .. code-tab:: xml
@@ -162,7 +161,7 @@ during the shutter interval, causing the entire frame to blur.
 Animated emitters
 -----------------
 
-Emitters can also be animated using an animated ``to_world`` transformation:
+Emitters can also be animated using an animated ``to_world`` transformation.
 
 .. tabs::
     .. code-tab:: xml
@@ -201,11 +200,11 @@ Emitters can also be animated using an animated ``to_world`` transformation:
 In this example, a spot light moves along an arc around a static bunny. The
 geometry stays sharp while the cast shadow smears across the shutter interval.
 
-**Limitations:**
+**Limitations**
 
-- **Area emitters cannot be animated**: Shapes are animated through instancing
+- **Area emitters cannot be animated**. Shapes are animated through instancing
   (via ``shapegroup``), which does not support attached emitters.
-- **Sunsky emitters reject animated transforms**: Rotating the sky dome does not
+- **Sunsky emitters reject animated transforms**. Rotating the sky dome does not
   physically model the sun's trajectory. Use the ``timed_sunsky`` plugin
   instead, which models sun movement over time using date and time parameters.
 
@@ -261,7 +260,7 @@ static camera and lighting.
 
 .. note::
 
-    Animated instances require **evenly spaced** keyframes: Embree, OptiX, and
+    Animated instances require **evenly spaced** keyframes. Embree, OptiX, and
     Metal define motion via a keyframe count and time interval, interpolating
     intermediate times uniformly. Keyframes with non-uniform spacing will raise
     an error. (This restriction does not apply to sensors or emitters.)
@@ -270,7 +269,7 @@ Backend differences
 *******************
 
 Ray tracing backends differ in how they implement motion blur, most notably in
-how they interpolate rotations:
+how they interpolate rotations.
 
 .. list-table::
     :header-rows: 1
@@ -281,26 +280,26 @@ how they interpolate rotations:
       - Animated instances
     * - Embree (``llvm_*``, ``scalar_*``)
       - Slerp
-      - Fully supported; matches Mitsuba's internal evaluation. At most 129
-        keyframes per instance (``RTC_MAX_TIME_STEP_COUNT``). Out-of-range
-        instances **disappear** (see :ref:`below <sec-animation-time-range>`).
+      - Fully supported and matches Mitsuba's internal evaluation. At most 129
+        keyframes per instance. Out-of-range instances **disappear** (see :ref:`below <sec-animation-time-range>`).
     * - OptiX (``cuda_*``)
       - Nlerp
-      - Fully supported via SRT motion transforms (linear interpolation of
-        quaternion components followed by normalization). At most 65535
-        keyframes per instance. Out-of-range instances are **clamped**.
+      - Fully supported. At most 65535 keyframes per instance. Out-of-range
+        instances are **clamped**.
     * - Metal (``metal_*``)
       - Nlerp
-      - Fully supported via component transforms (``MTLComponentTransform``),
-        matching OptiX. Out-of-range instances are **clamped**.
+      - Fully supported and matches OptiX. Out-of-range instances are **clamped**.
     * - Native kd-tree
       - --
-      - Instancing is not supported; shapes cannot be animated.
+      - Instancing and animated shapes are not supported.
 
-The difference between Slerp and Nlerp is demonstrated below. A teapot rotates
-150 degrees about the vertical axis between two keyframes, rendered with a closed
+Slerp (spherical linear interpolation) interpolates rotations at constant angular
+speed. Nlerp (normalized linear interpolation) linearly blends quaternion
+components and normalizes the result.
+
+The teapot below rotates 150 degrees about the vertical axis between two keyframes, rendered with a closed
 shutter (``shutter_open == shutter_close``) to capture instantaneous poses
-(:monosp:`resources/data/docs/scenes/animation_rotation.xml`):
+(:monosp:`resources/data/docs/scenes/animation_rotation.xml`).
 
 .. subfigstart::
 .. subfigure:: ../../../resources/data/docs/images/render/animation_rotation_embree.jpg
@@ -313,12 +312,11 @@ shutter (``shutter_open == shutter_close``) to capture instantaneous poses
     :label: fig-animation-rotation
 
 Slerp and Nlerp agree exactly at :math:`t = 0`, :math:`t = 0.5`, and
-:math:`t = 1` (where the normalized average is the midpoint of the great-circle
-arc). Their disagreement peaks near :math:`t \approx 0.23` and
-:math:`t \approx 0.77`, shown above.
+:math:`t = 1`. For this rotation, their disagreement peaks near
+:math:`t \approx 0.23` and :math:`t \approx 0.77`, shown above.
 
 Opening the shutter across the full interval accumulates these pose differences
-into motion blur:
+into motion blur.
 
 .. subfigstart::
 .. subfigure:: ../../../resources/data/docs/images/render/animation_rotation_blur_embree.jpg
@@ -330,10 +328,8 @@ into motion blur:
 .. subfigend::
     :label: fig-animation-rotation-blur
 
-Because Slerp and Nlerp trace the same rotational arc and differ only in angular
-speed along that path, blurred silhouettes cover identical extents and differ
-primarily in density (visible in the teapot's spout). Both GPU backends (CUDA
-and Metal) match each other closely.
+Both methods follow the same rotational arc, so blurred silhouettes have the
+same extent but differ in density, as visible in the teapot's spout.
 
 For instances with large rotations between keyframes, GPU renders may subtly
 deviate from CPU renders due to this non-constant angular velocity. The angular
@@ -346,16 +342,14 @@ large rotations with additional keyframes reduces this difference.
 Instances with differing time ranges
 ************************************
 
-Instances need not share a common time range; the scene-wide range is their
+Instances need not share a common time range. The scene-wide range is their
 union. However, when a ray's time falls *outside* an instance's specified
-keyframe range, backend behaviors diverge:
+keyframe range, backend behaviors differ.
 
 - **OptiX and Metal** clamp the time, keeping the instance frozen at its first or
   last keyframe pose.
-- **Embree** restricts the instance to its time sub-interval (via
-  ``rtcSetGeometryTimeRange``); rays outside this range do not intersect the
-  instance, causing it to **disappear** (a warning is emitted at scene load
-  time).
+- **Embree** hides the instance outside its keyframe range and emits a warning
+  at scene load time.
 
 To achieve identical rendering across all backends, ensure every animated
 instance has keyframes spanning the entire camera shutter interval (e.g., by
@@ -365,7 +359,7 @@ Animation and ``mitsuba.traverse()``
 ------------------------------------
 
 Through :py:func:`mitsuba.traverse()`, an animated transformation exposes its
-keyframes as four component tensors:
+keyframes as four component tensors.
 
 .. list-table::
     :header-rows: 1
@@ -387,7 +381,7 @@ keyframes as four component tensors:
       - ``(N, 3)``
       - Translations
 
-Editing one component leaves the others untouched:
+Editing one component leaves the others untouched.
 
 .. code-block:: python
 
@@ -397,25 +391,13 @@ Editing one component leaves the others untouched:
     params['instance.to_world.translation'] = t
     params.update()
 
-The four tensors are views into a single packed buffer and must always agree on
-the number of keyframes. **Changing the keyframe count requires updating all
-four tensors together** with matching row counts; updating only a subset will
-raise an error. Because parameter availability depends on the keyframe count,
-:py:func:`mitsuba.traverse()` must be called again afterwards.
-
-.. code-block:: python
-
-    # Update all four keyframe tensors simultaneously
-    params['instance.to_world.times']       = mi.TensorXf([0.0, 1.0])
-    params['instance.to_world.scale']       = mi.TensorXf([[1, 1, 1], [1, 1, 1]])
-    params['instance.to_world.rotation']    = mi.TensorXf([[0, 0, 0, 1], [0, 0, 0, 1]])
-    params['instance.to_world.translation'] = mi.TensorXf([[0, 0, 0], [1, 0, 0]])
-    params.update()
+The four tensors share a packed buffer and must have matching keyframe counts.
+Call :py:func:`mitsuba.traverse()` again after changing the keyframe count.
 
 When a transformation contains only a **single keyframe**, it additionally
 exposes a plain 4x4 matrix directly under its parent name (e.g.,
 ``params['sensor.to_world']``) for backwards compatibility. That matrix takes
-precedence if written alongside the component views:
+precedence if written alongside the component views.
 
 .. code-block:: python
 
@@ -424,7 +406,7 @@ precedence if written alongside the component views:
 
 .. note::
 
-    Animated instances are not currently differentiable: backend acceleration
+    Animated instances are not currently differentiable. Backend acceleration
     structures rebuild instances from host-side representations, so gradients
     do not propagate to instance keyframe components.
 

@@ -26,9 +26,8 @@ void bind_animated_transform(nb::module_ &m, const char *name) {
                        const std::unordered_map<ScalarFloat, ScalarAffineTransform4f> &keyframes) {
                         std::vector<std::pair<ScalarFloat, ScalarAffineTransform4f>> kf;
                         kf.reserve(keyframes.size());
-                        for (const auto &[time, trafo] : keyframes) {
+                        for (const auto &[time, trafo] : keyframes)
                             kf.push_back({ time, trafo });
-                        }
                         new (t) AnimatedTransform(kf);
                     },
                     "Initialize from a dictionary of keyframes")

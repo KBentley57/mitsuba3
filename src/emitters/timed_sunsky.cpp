@@ -210,9 +210,8 @@ public:
     MI_IMPORT_TYPES()
 
     TimedSunskyEmitter(const Properties &props) : Base(props) {
-        if (m_to_world->is_animated()) {
-          Throw("TimedSunskyEmitter: 'to_world' cannot be animated directly. Please use 'interval'.");
-        }
+        if (m_to_world->is_animated())
+            Throw("TimedSunskyEmitter: 'to_world' cannot be animated directly. Please use 'interval'.");
 
         m_shutter_open          = props.get<ScalarFloat>("shutter_open", 0.f);
         m_inv_shutter_open_time = props.get<ScalarFloat>("shutter_close", 1.f) - m_shutter_open;

@@ -382,7 +382,7 @@ MI_VARIANT void Scene<Float, Spectrum>::update_instance_transforms() {
     // If any instance is animated, build per-instance keyframe buffers used by
     // eval_instance_to_world() for time-dependent (motion-blurred) lookups.
     // Static instances contribute a single keyframe so the buffers remain
-    // addressable for every instance; the interpolation math is skipped for
+    // addressable for every instance. The interpolation math is skipped for
     // them via a per-lane count check.
     m_static_instance_count = 0;
     for (size_t i = 0; i < n; ++i)
@@ -426,7 +426,7 @@ MI_VARIANT void Scene<Float, Spectrum>::update_instance_transforms() {
               "%zu keyframes in total, which exceeds the limit of %u.",
               running, MaxInstanceKeyframes);
 
-    // Note: m_instance_kf_data is a read-only acceleration cache populated on the
+    // m_instance_kf_data is a read-only acceleration cache populated on the
     // host for primal motion blur evaluation during ray tracing and surface
     // interaction reconstruction. Dynamic keyframe data is non-differentiable.
     m_instance_kf_data = dr::load<DynamicBuffer<Float>>(chunks.data(), chunks.size());
@@ -434,19 +434,16 @@ MI_VARIANT void Scene<Float, Spectrum>::update_instance_transforms() {
 }
 
 // Reconstructs the instance-to-world transform at the specified ray time.
-// Interpolation matches the ray tracing backend used during ray intersection:
-// - Metal: normalized linear interpolation (nlerp) on quaternions (via MTLComponentTransform)
-// - OptiX (CUDA): normalized linear interpolation (nlerp) on quaternions
-// - Embree (CPU): spherical linear interpolation (slerp) on quaternions
+// Interpolation matches the ray tracing backend used during ray intersection.
+// Metal and OptiX use normalized linear interpolation (nlerp) on quaternions.
+// Embree uses spherical linear interpolation (slerp) on quaternions.
 MI_VARIANT typename Scene<Float, Spectrum>::AffineTransform4f
 Scene<Float, Spectrum>::eval_instance_to_world(const UInt32 &i0,
                                                const Float &time,
                                                Mask active) const {
     auto gather_static = [&]() {
-        // Each record holds the matrix and its inverse transpose (24 values,
-        // see update_instance_transforms()). The inverse transpose of the
-        // transform is the transpose of the stored inverse, so reconstructing
-        // it here avoids an inversion per hit.
+        // Each record holds the matrix and its inverse (24 values).
+        // Transpose the stored inverse to avoid an inversion per hit.
         auto rec = dr::gather<dr::Array<Float, 24>>(m_instance_transforms, i0,
                                                     active);
         return AffineTransform4f(
@@ -454,7 +451,7 @@ Scene<Float, Spectrum>::eval_instance_to_world(const UInt32 &i0,
             dr::transpose(unpack_matrix<Matrix4f>(rec, 12)));
     };
 
-    // No animated instance in the scene: nothing to interpolate.
+    // There are no animated instances in the scene, so nothing needs interpolation.
     if (m_instance_kf_meta.size() == 0)
         return gather_static();
 
@@ -477,7 +474,7 @@ Scene<Float, Spectrum>::eval_instance_to_world(const UInt32 &i0,
            ki0  = base + ki,
            ki1  = base + dr::minimum(ki + 1u, k_max);
 
-    // A keyframe is contiguous in memory, so each one is a single packet load
+    // Gather each contiguous keyframe as a packet
     using PackedKeyframe = dr::Array<Float, KeyframeStride>;
     PackedKeyframe a = dr::gather<PackedKeyframe>(m_instance_kf_data, ki0, animated),
                    b = dr::gather<PackedKeyframe>(m_instance_kf_data, ki1, animated);
@@ -497,7 +494,7 @@ Scene<Float, Spectrum>::eval_instance_to_world(const UInt32 &i0,
         }
     }();
 
-    // Every instance animated: the static matrices are dead weight
+    // Every instance is animated, so the static matrices are unused
     if (m_static_instance_count == 0)
         return animated_to_world;
 

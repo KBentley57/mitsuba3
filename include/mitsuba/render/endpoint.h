@@ -313,28 +313,27 @@ public:
     virtual Spectrum eval(const SurfaceInteraction3f &si, Mask active = true) const;
 
 
-    /// Return the local space to world space transformation at time \c time
+    /// Return the local-to-world transformation at ``time``
     AffineTransform4f world_transform(Float time = 0.f) const {
         return m_to_world->eval(time);
     }
 
     /**
-     * \brief Return the local space to world space transformation as a
-     * scalar transform at time \c time
+     * Return the scalar local-to-world transformation at ``time``
      *
-     * This mirrors `world_transform()` without touching the device: reading
-     * the JIT representation back would wait for all queued work.
+     * This mirrors `world_transform` using host-side data, avoiding a wait
+     * for queued device work.
      */
     ScalarAffineTransform4f world_transform_scalar(ScalarFloat time = 0.f) const {
         return m_to_world->eval_scalar(time);
     }
 
-    /// Return the underlying animated transformation
+    /// Return the underlying `AnimatedTransform4f`
     const AnimatedTransform<Float, Spectrum>* animated_world_transform() const {
         return m_to_world.get();
     }
 
-    /// Return the underlying animated transformation
+    /// Return the underlying `AnimatedTransform4f`
     AnimatedTransform<Float, Spectrum>* animated_world_transform() {
         return m_to_world.get();
     }

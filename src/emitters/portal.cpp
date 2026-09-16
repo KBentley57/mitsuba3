@@ -66,9 +66,8 @@ public:
     Portal(const Properties &props) : Base(props) {
         // Solid angle sampling needs a rectangle
 
-        if (m_to_world->is_animated()) {
+        if (m_to_world->is_animated())
             Throw("Animated portals are not supported!");
-        }
         ScalarAffineTransform4f to_world = world_transform_scalar();
         ScalarVector3f du = to_world * ScalarVector3f(1.f, 0.f, 0.f),
                        dv = to_world * ScalarVector3f(0.f, 1.f, 0.f);

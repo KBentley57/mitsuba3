@@ -37,7 +37,7 @@ struct MiOptixSceneState {
         void* inputs = nullptr;  // Device-visible storage for OptixInstance array
     } ias_data;
     /// Device allocations backing per-instance SRT motion transforms, owned
-    /// here; freed on rebuild() and when the IAS is released.
+    /// here. Freed on rebuild() and when the IAS is released.
     std::vector<void*> motion_transforms;
     /// Per-shape SBT data buffers, owned here; refreshed on rebuild().
     ShapeDataBuffers shape_data;
@@ -672,7 +672,7 @@ static void optix_switch_config(Scene<Float, Spectrum> *scene,
     using UInt64 = dr::uint64_array_t<Float>;
     MiOptixSceneState &s = *state;
 
-    // A shared record table cannot be repacked here: the host scene and its
+    // A shared record table cannot be repacked here because the host scene and its
     // nested scenes are bound to the same pipeline (see init()).
     size_t own_count = optix_record_count(sd);
     if (s.host || s.sbt.hitgroupRecordCount != own_count)
@@ -701,7 +701,7 @@ static void optix_switch_config(Scene<Float, Spectrum> *scene,
 
     // The hit records need the same treatment. The record count is unchanged,
     // so they are rewritten into the existing table. Clearing the cached order
-    // forces the write: the shapes may be identical, but their record headers
+    // forces the write. The shapes may be identical, but their record headers
     // are packed from the program groups of the old pipeline.
     s.sbt_order.clear();
     optix_write_sbt_records(s, sd, config);

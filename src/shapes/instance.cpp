@@ -64,7 +64,7 @@ public:
 
     Instance(const Properties &props) : Base(props) {
         for (auto &prop : props.objects()) {
-            // An <animation> arrives as an object property; Shape's constructor
+            // An <animation> arrives as an object property. Shape's constructor
             // already consumed it
             if (prop.try_get<AnimatedTransform4f>())
                 continue;
@@ -87,8 +87,7 @@ public:
         m_shape_type = ShapeType::Instance;
 
         m_to_world->ensure_uniform_keyframes();
-        // 'instance' does not call Shape::initialize(), which is where the
-        // other shapes request this
+        // Instances skip Shape::initialize(), so make the transform opaque here.
         m_to_world->make_transform_opaque();
     }
 
@@ -173,7 +172,7 @@ public:
         g.type = m_shape_type;
         g.ctx = this;
 
-        // Animated instances are emitted as decomposed keyframes; a static one
+        // Animated instances are emitted as decomposed keyframes. A static one
         // is described by 'to_world' below.
         if (m_to_world->is_animated()) {
             for (const auto &[time, kf] : m_to_world->keyframes()) {

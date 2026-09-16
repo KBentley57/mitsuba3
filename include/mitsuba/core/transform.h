@@ -551,7 +551,7 @@ std::ostream &operator<<(std::ostream &os, const Transform<Point, Affine> &t) {
 }
 
 /**
- * \brief Decompose an affine 4x4 matrix into scale (S), shear (H), rotation
+ * Decompose an affine 4x4 matrix into scale (S), shear (H), rotation
  * quaternion (Q), and translation (T)
  *
  * The result satisfies ``M = T * R(Q) * U(S, H)``, where ``U`` is the upper
@@ -566,10 +566,10 @@ auto transform_decompose_srt(const Matrix4 &a) {
     using Value = dr::entry_t<Matrix4>;
     using Vector3 = dr::Array<Value, 3>;
 
-    // Fast path: standard polar decomposition for rigid / scaled transforms
+    // Use standard polar decomposition as a fast path for rigid / scaled transforms
     auto [P, Q, T] = dr::transform_decompose(a);
 
-    // A mirroring transformation has to take the QR path below instead: the
+    // A mirroring transformation has to take the QR path below instead. The
     // polar decomposition folds the reflection into the rotation, which can
     // make it a 180 degree rotation, and 'matrix_to_quat' recovers the axis of
     // those with the wrong sign. QR keeps the reflection in the scale.

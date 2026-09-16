@@ -33,20 +33,17 @@ MI_VARIANT
 AnimatedTransform<Float, Spectrum>::AnimatedTransform(
     const std::vector<std::pair<ScalarFloat, ScalarAffineTransform4f>>
         &keyframes) {
-    if (keyframes.size() == 1) {
+    if (keyframes.size() == 1)
         m_transform = AffineTransform4f(keyframes.begin()->second);
-    }
-    for (const auto &[time, trafo] : keyframes) {
+    for (const auto &[time, trafo] : keyframes)
         add_keyframe(time, trafo);
-    }
     initialize();
 }
 
 MI_VARIANT typename AnimatedTransform<Float, Spectrum>::AffineTransform4f
 AnimatedTransform<Float, Spectrum>::eval(Float time) const {
-    if (m_n_keyframes == 1) {
+    if (m_n_keyframes == 1)
         return m_transform.value();
-    }
 
     auto pred = [&](UInt32 idx) {
         return dr::gather<Float>(m_data, idx * KeyframeStride) <= time;
@@ -80,9 +77,8 @@ AnimatedTransform<Float, Spectrum>::eval(Float time) const {
 
 MI_VARIANT typename AnimatedTransform<Float, Spectrum>::ScalarAffineTransform4f
 AnimatedTransform<Float, Spectrum>::eval_scalar(ScalarFloat time) const {
-    if (m_n_keyframes == 1) {
+    if (m_n_keyframes == 1)
         return m_transform.scalar();
-    }
 
     // First keyframe at or after `time`.
     auto it1 = std::lower_bound(m_keyframes.begin(), m_keyframes.end(), time,
@@ -90,12 +86,12 @@ AnimatedTransform<Float, Spectrum>::eval_scalar(ScalarFloat time) const {
                                    ScalarFloat b) { return a.first < b; });
     auto it0 = it1;
     if (it1 == m_keyframes.end()) {
-        // Past the last keyframe: clamp to it.
+        // Clamp to the last keyframe when past it.
         it1 = std::prev(it1);
         it0 = it1;
     } else if (it1 != m_keyframes.begin()) {
         it0 = std::prev(it1);
-    } // else: before the first keyframe, clamp to it (it0 == it1).
+    } // Before the first keyframe, clamp to it (it0 == it1).
 
     if (it0 == it1) {
         const Keyframe &kf = it0->second;
@@ -134,18 +130,17 @@ MI_VARIANT void AnimatedTransform<Float, Spectrum>::parameters_changed(
     // so it has to agree with m_keyframes[0].
     if (m_n_keyframes == 1) {
         if (transform_changed) {
-            // The user wrote m_transform in place through traversal; refresh its
+            // The user wrote m_transform in place through traversal. Refresh its
             // inverse transpose and re-derive the keyframe from it.
             m_transform = m_transform.value().update();
             auto [S, H, Q, T] = transform_decompose_srt(m_transform.scalar().matrix);
             m_keyframes[0].second = { S, Q, T };
             m_has_shear = keyframe_has_shear(S, H);
-            // 'm_data' and its views are derived from the keyframes, so they
-            // have to follow the matrix that was just written
+            // Refresh the packed buffer and views from the updated matrix.
             pack_data();
         } else {
             // The views changed (possibly shrinking the animation down to a
-            // single keyframe); m_keyframes[0] is already up to date.
+            // single keyframe). m_keyframes[0] is already up to date.
             const auto &kf = m_keyframes[0].second;
             m_transform = ScalarAffineTransform4f(kf.S, kf.Q, kf.T);
         }
@@ -164,12 +159,11 @@ MI_VARIANT void AnimatedTransform<Float, Spectrum>::add_keyframe(
 }
 
 MI_VARIANT void AnimatedTransform<Float, Spectrum>::initialize() {
-    if (m_keyframes.empty()) {
+    if (m_keyframes.empty())
         Throw("Animated transform requires at least one keyframe, found 0.");
-    }
 
     // Keyframes are stored in decomposed form, which has no shear component.
-    // A constant transformation is exempt: it is evaluated as a plain matrix.
+    // A constant transformation is exempt and is evaluated as a plain matrix.
     if (m_keyframes.size() > 1 && m_has_shear)
         Throw("AnimatedTransform: keyframe transformations must not contain "
               "shear, the interpolated representation cannot express it.");
@@ -189,8 +183,8 @@ MI_VARIANT void AnimatedTransform<Float, Spectrum>::initialize() {
                   "(%f), keyframe times must be distinct.",
                   m_keyframes[idx].first);
 
-        // OptiX requires subsequent quaternions to be on the same hemisphere.
-        // For larger rotations, additional keys need to be specified.
+        // Keep adjacent quaternions in the same hemisphere for OptiX.
+        // Rotations beyond 180 degrees need intermediate keyframes.
         if (dr::dot(m_keyframes[idx - 1].second.Q, m_keyframes[idx].second.Q) < 0.f)
             m_keyframes[idx].second.Q = -m_keyframes[idx].second.Q;
     }
@@ -223,9 +217,7 @@ MI_VARIANT void AnimatedTransform<Float, Spectrum>::unpack_data() {
         dr::sync_thread();
     const ScalarFloat *data_ptr = packed_data.data();
 
-    // Rebuild the host-side keyframes verbatim, in buffer order. The caller
-    // owns the invariants (see the header), so this deliberately does not sort
-    // or repair anything.
+    // Rebuild host-side keyframes in buffer order. The caller validates them.
     std::vector<std::pair<ScalarFloat, Keyframe>> new_keyframes;
     new_keyframes.reserve(n);
     for (size_t i = 0; i < n; ++i) {
@@ -325,9 +317,8 @@ AnimatedTransform<Float, Spectrum>::get_time_bounds() const {
 MI_VARIANT typename AnimatedTransform<Float, Spectrum>::ScalarBoundingBox3f
 AnimatedTransform<Float, Spectrum>::get_translation_bounds() const {
     ScalarBoundingBox3f bbox;
-    for (auto const &[time, kf] : m_keyframes) {
+    for (auto const &[time, kf] : m_keyframes)
         bbox.expand(ScalarPoint3f(kf.T));
-    }
     return bbox;
 }
 
@@ -383,11 +374,10 @@ AnimatedTransform<Float, Spectrum>::ensure_uniform_keyframes() const {
     size_t i = 0;
     for (auto const &[time, kf] : m_keyframes) {
         ScalarFloat expected_time = start + i * step;
-        if (dr::abs(time - expected_time) > relative_tol) {
+        if (dr::abs(time - expected_time) > relative_tol)
             Throw("Expected a uniform range of keyframes, but keyframe %zu was "
                   "at time %f, expected %f",
                   i, time, expected_time);
-        }
         ++i;
     }
 }
@@ -395,9 +385,8 @@ AnimatedTransform<Float, Spectrum>::ensure_uniform_keyframes() const {
 MI_VARIANT std::string AnimatedTransform<Float, Spectrum>::to_string() const {
     std::ostringstream oss;
     oss << class_name() << "[" << std::endl;
-    for (auto const &[time, kf] : m_keyframes) {
+    for (auto const &[time, kf] : m_keyframes)
         oss << "  " << time << ": " << kf.to_string() << "," << std::endl;
-    }
     oss << "]";
     return oss.str();
 }

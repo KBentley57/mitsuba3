@@ -221,9 +221,8 @@ static void compact_blases(id<MTLDevice> device, id<MTLCommandQueue> queue,
     // The caller encodes the TLAS into this command buffer.
 }
 
-/// Convert a decomposed keyframe into Metal's MTLComponentTransform.
-/// KeyframeIR stores the quaternion w-first (quat[0] = w, quat[1..3] = x, y, z).
-/// MTLPackedFloatQuaternion stores (x, y, z, w).
+/// Convert a keyframe to ``MTLComponentTransform``, reordering its quaternion
+/// from ``(w, x, y, z)`` to Metal's ``(x, y, z, w)``.
 static MTLComponentTransform to_component_transform(const KeyframeIR &kf) {
     MTLComponentTransform ct = {};
     ct.scale = MTLPackedFloat3Make(kf.scale[0], kf.scale[1], kf.scale[2]);
@@ -233,11 +232,9 @@ static MTLComponentTransform to_component_transform(const KeyframeIR &kf) {
     return ct;
 }
 
-/// Convert an instance-to-world matrix (column-major 3x4) into Metal's
-/// MTLComponentTransform. A motion acceleration structure describes every
-/// instance through this representation, so an instance that is *not* animated
-/// has its matrix decomposed here. Unlike interpolated keyframes, a single key
-/// can also carry shear.
+/// Convert a column-major 3x4 instance matrix to ``MTLComponentTransform``.
+/// Metal motion acceleration structures also require this representation for
+/// static instances, whose matrices may contain shear.
 static MTLComponentTransform to_component_transform(const float to_world[12]) {
     using Matrix4f = dr::Matrix<float, 4>;
 
@@ -635,9 +632,8 @@ build_impl(const std::vector<BlasEntry> &blases,
                 (MTLAccelerationStructureMotionInstanceDescriptor *) inst_alloc.ptr;
             temp_allocations.push_back(std::move(inst_alloc));
 
-            // The TLAS keeps referencing this buffer, so the allocation has to
-            // outlive the build: hand it to the scene rather than letting it
-            // free itself at the end of this scope.
+            // The TLAS retains this buffer after the build, so transfer its
+            // ownership to the scene.
             BufferAllocation motion_alloc(
                 total_motion_transforms * sizeof(MTLComponentTransform), true);
             motion_transforms_buf = motion_alloc.buffer();
@@ -663,8 +659,8 @@ build_impl(const std::vector<BlasEntry> &blases,
                     for (const KeyframeIR &kf : inst.keyframes)
                         motion_transforms[transform_index++] = to_component_transform(kf);
                 } else {
-                    // Static entry (a top-level BLAS has an identity
-                    // 'to_world'): a single key, clamped over the whole range.
+                    // Static entries use a single key, clamped over the whole range.
+                    // A top-level BLAS has an identity 'to_world'.
                     d.motionTransformsCount = 1;
                     d.motionStartTime       = 0.f;
                     d.motionEndTime         = 1.f;
@@ -739,8 +735,8 @@ build_impl(const std::vector<BlasEntry> &blases,
         id<MTLLibrary> isect_library =
             any_custom ? intersection_fn_library(device) : nil;
 
-        // Bit 0: triangles, bit 1: bounding boxes, bit 2: curves, bit 3:
-        // triangle backface culling, bit 4: instance motion. Dr.Jit uses this
+        // Bits 0 through 4 indicate triangles, bounding boxes, curves, triangle
+        // backface culling, and instance motion, respectively. Dr.Jit uses this
         // to select the MSL intersector<...> template tags and culling mode.
         uint32_t geom_mask = 0x1u;
         if (any_custom) geom_mask |= 0x2u;

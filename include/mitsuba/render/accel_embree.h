@@ -87,15 +87,16 @@ struct EmbreeAccel {
     /// plus its registry ID (LLVM mode) or sequentially (scalar mode)
     uint32_t instance_count = 0;
 
-    /// Scene-wide keyframe time bounds for normalizing ray and keyframe times to [0, 1] for Embree
+    /// Scene-wide keyframe bounds used to normalize ray and keyframe times
+    /// to Embree's ``[0, 1]`` interval.
     ScalarFloat time_min = 0.f;
     ScalarFloat time_max = 0.f;
 
     /**
-     * Map a ray time onto the [0, 1] range that Embree expects
+     * Map a ray time onto Embree's ``[0, 1]`` interval
      *
-     * Times outside of the scene-wide keyframe range clamp to the first/last
-     * keyframe. The range is defined by *all* animated instances.
+     * Clamp times outside the combined range of all animated instances
+     * to the nearest boundary.
      */
     template <typename Value> Value normalize_ray_time(const Value &time) const {
         if (time_max <= time_min)

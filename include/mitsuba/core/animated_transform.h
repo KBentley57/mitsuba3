@@ -15,7 +15,7 @@
 
 NAMESPACE_BEGIN(mitsuba)
 
-/// Number of floats per keyframe in the packed ``AnimatedTransform`` buffer.
+/// Number of floats per keyframe in the packed `AnimatedTransform4f` buffer.
 constexpr uint32_t KeyframeStride = 12;
 
 /**
@@ -26,40 +26,56 @@ constexpr uint32_t KeyframeStride = 12;
  * spherical linear interpolation (for rotation).
  *
  * Internally, keyframes are packed into a flat buffer with a stride of
- * ``KeyframeStride`` floats per keyframe to optimize vectorized loads. The
- * layout per keyframe is:
+ * ``KeyframeStride`` floats per keyframe to optimize vectorized loads. Each
+ * keyframe has the following layout.
  *
  * ``[time, scale.x, scale.y, scale.z, quat.x, quat.y, quat.z, quat.w,
  * trans.x, trans.y, trans.z, unused]``
  *
- * This representation cannot express shear: a transformation with more than one
+ * This representation cannot express shear. Transformations with more than one
  * keyframe must therefore be free of shear. Constant (single-keyframe)
  * transformations are exempt, since they are evaluated as a plain matrix.
  *
- * The class keeps two redundant representations of the same animation: the
- * device-side buffer ``m_data`` (read by ``eval()``) and the host-side keyframe
- * list ``m_keyframes`` (read by ``eval_scalar()`` and ``keyframes()``). They
- * are synchronized by the constructors and by ``parameters_changed()``.
+ * The device buffer ``m_data`` supplies `eval`, while the host-side list
+ * ``m_keyframes`` supplies `eval_scalar` and ``keyframes()``. Constructors
+ * and `Object.parameters_changed` keep them synchronized.
  *
- * Through ``mitsuba::traverse()`` the transformation always exposes the
- * keyframes as tensor views into ``m_data``, one per component: ``"times"``
- * ``(N,)``, ``"scale"`` ``(N, 3)``, ``"rotation"`` ``(N, 4)`` and
- * ``"translation"`` ``(N, 3)``. They share one buffer and must agree on ``N``,
- * so changing the number of keyframes means writing all four together.
+ * `traverse` exposes four tensor views into ``m_data``.
  *
- * While the transformation holds a *single* keyframe it additionally exposes
- * the plain 4x4 matrix under the empty name, which surfaces under the parent's
- * name (e.g. ``"to_world"``). That matrix is the representation evaluated in
- * that case, and takes precedence if it is written together with the views.
+ * .. list-table::
+ *    :header-rows: 1
+ *
+ *    * - Component
+ *      - Shape
+ *      - Contents
+ *    * - ``times``
+ *      - ``(N,)``
+ *      - Keyframe times
+ *    * - ``scale``
+ *      - ``(N, 3)``
+ *      - Per-axis scale factors
+ *    * - ``rotation``
+ *      - ``(N, 4)``
+ *      - Rotation quaternions in ``(x, y, z, w)`` order
+ *    * - ``translation``
+ *      - ``(N, 3)``
+ *      - Translations
+ *
+ * The tensors share one buffer and must agree on ``N``, so changing the
+ * number of keyframes requires updating all four together.
+ *
+ * A single-keyframe transformation also exposes a 4x4 matrix under its
+ * parent's parameter name (e.g. ``"to_world"``). Evaluation uses this matrix,
+ * which takes precedence when written alongside the component views.
  */
-MI_VARIANT
+template <typename Float, typename Spectrum>
 class MI_EXPORT_LIB AnimatedTransform : public Object {
 public:
     MI_IMPORT_CORE_TYPES()
 
     using FloatStorage = DynamicBuffer<Float>;
 
-    /// Helper struct to store individual, decomposed key frames.
+    /// Decomposed scale, rotation, and translation of a keyframe.
     struct Keyframe {
         ScalarVector3f S;
         ScalarQuaternion4f Q;
@@ -86,65 +102,57 @@ public:
     /**
      * Evaluate the transformation at a specific time
      *
-     * This method performs a vectorized interpolation between keyframes,
-     * reading from the packed device buffer. Times outside of
-     * ``get_time_bounds()`` are clamped to the first/last keyframe.
+     * Interpolate keyframes from the device buffer. Times outside the range
+     * returned by `get_time_bounds` are clamped to the first or last keyframe.
      */
     AffineTransform4f eval(Float time) const;
 
     /**
      * Scalar evaluation of the transformation
      *
-     * This version is for use on the host (e.g., during AABB construction) and
-     * reads the host-side keyframe list rather than the device buffer.
+     * Version of `eval` that reads the host-side keyframe list.
      */
     ScalarAffineTransform4f eval_scalar(ScalarFloat time) const;
 
     /// Check if the transformation is animated
     bool is_animated() const { return m_n_keyframes > 1; }
 
-    /// Promote the single-keyframe matrix to an opaque JIT variable. This is 
-    /// used to prevent baking of static transforms into JIT kernels.
+    /// Make the single-keyframe matrix opaque to prevent its values from being
+    /// baked into JIT kernels.
     void make_transform_opaque() { dr::make_opaque(m_transform); }
 
-    /// Returns the host-side keyframes of the animated transform.
+    /// Return the host-side keyframes of the animated transform.
     const std::vector<std::pair<ScalarFloat, Keyframe>> &keyframes() const {
         return m_keyframes;
     }
 
-    /// Checks if JIT AD gradients are enabled on the parameter that is actually
-    /// evaluated: the static transform when there is a single keyframe, and the
-    /// packed keyframe buffer otherwise.
+    /// Check whether gradients are enabled on the evaluated representation,
+    /// either the single-keyframe matrix or the packed keyframe buffer.
     bool parameters_grad_enabled() const {
         if (is_animated())
             return dr::grad_enabled(m_data);
         return dr::grad_enabled(m_transform.value());
     }
 
-    /// Returns the time bounds of the animated transform.
+    /// Return the time bounds of the animated transform.
     ScalarBoundingBox1f get_time_bounds() const;
 
-    /// Returns the bounding box of the translation component of the animated
+    /// Return the bounding box of the translation component of the animated
     /// transform.
     ScalarBoundingBox3f get_translation_bounds() const;
 
-    /// Evaluates the spatial bounds of the animated transform over the given
-    /// bounding box. This is used to compute the AABB of animated objects.
-    /// Note: This is an approximation computed by sampling the transformation
-    /// at regular intervals. It may not be perfectly conservative for highly
-    /// non-linear motion.
+    /// Approximate the swept bounds of ``bbox`` by sampling the transformation
+    /// at regular intervals and at every keyframe. These bounds may not be
+    /// conservative for nonlinear motion.
     ScalarBoundingBox3f get_spatial_bounds(const ScalarBoundingBox3f &bbox) const;
 
-    /// Checks if any keyframe has a scale component different from 1.
+    /// Check if any keyframe has a scale component different from 1.
     bool has_scale() const;
 
-    /// Checks if the transformation contains a shear component. This is only
-    /// ever the case for constant (single-keyframe) transformations, which are
-    /// evaluated as a plain matrix.
+    /// Check for shear, which is only supported by single-keyframe transforms.
     bool has_shear() const;
 
-    /// Checks if all keyframes are uniformly spaced in time. Raises an
-    /// exception if this is not the case.
+    /// Raise an exception if the keyframes are not uniformly spaced in time.
     void ensure_uniform_keyframes() const;
 
     void traverse(TraversalCallback *cb) override;
@@ -162,7 +170,7 @@ protected:
 private:
     void add_keyframe(ScalarFloat time, const ScalarAffineTransform4f &trafo);
 
-    /// One-time initialization call that is used by constructors.
+    /// Initialize keyframe storage and validate the animation.
     void initialize();
 
     /// Repack ``m_data`` from the host-side ``m_keyframes``
@@ -185,7 +193,7 @@ private:
     size_t m_n_keyframes = 1;
 
     /// Set when a keyframe transformation contained shear, which the
-    /// decomposition above cannot represent (see ``has_shear()``)
+    /// decomposition above cannot represent (see `has_shear`)
     bool m_has_shear = false;
 
     /// Writable views into ``m_data``, see the class documentation
@@ -211,7 +219,7 @@ void pack_keyframe(ScalarFloat_ time, const Keyframe_ &kf, ScalarFloat_ *out) {
 }
 
 
-/// Helper function to parse an AnimatedTransform from Properties.
+/// Parse an `AnimatedTransform4f` from `Properties`.
 template <typename Float, typename Spectrum>
 ref<AnimatedTransform<Float, Spectrum>> parse_animated_transform(
     const Properties &props, const std::string &name = "to_world") {

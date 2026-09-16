@@ -502,7 +502,7 @@ def test09_animated_instance(variants_all_rgb, num_keyframes):
     keyframes = {}
     for i in range(num_keyframes):
         t = 10.0 * i / (num_keyframes - 1)
-        # Create key frames outside [0, 1] interval
+        # Create keyframes outside the [0, 1] interval
         keyframes[t + 5] = T().translate([0, 0, t / 10.0])
 
     scene = mi.load_dict({
@@ -557,7 +557,7 @@ def test10_animated_instance_rotation_scaling(variants_all_rgb):
             })
         },
         'instance_2': {
-            # Unrelated second moving instances
+            # Unrelated second moving instance
             'type': 'instance',
             'group': {'type': 'ref', 'id': 'group_0'},
             'to_world': mi.AnimatedTransform4f({
@@ -573,7 +573,7 @@ def test10_animated_instance_rotation_scaling(variants_all_rgb):
     assert dr.allclose(si.p, [0, 0, 0], atol=1e-6)
     assert dr.allclose(dr.abs(si.n), [0, 0, 1], atol=1e-4)
 
-    # At t=0, scale is 1.0; a ray at y=1.2 misses the rectangle (height [-1, 1])
+    # At t=0, scale is 1.0, so a ray at y=1.2 misses the rectangle (height [-1, 1])
     ray_off = mi.Ray3f(o=[0, 1.2, -3], d=[0, 0, 1], time=0.0)
     assert not dr.any(scene.ray_intersect(ray_off).is_valid())
 
@@ -583,7 +583,7 @@ def test10_animated_instance_rotation_scaling(variants_all_rgb):
     assert dr.all(si.is_valid())
     assert dr.allclose(dr.abs(si.n), [dr.sqrt(0.5), 0, dr.sqrt(0.5)], atol=1e-2)
 
-    # At t=5, scale is 1.5; a ray at y=1.2 now hits the rectangle (height [-1.5, 1.5])
+    # At t=5, scale is 1.5, so a ray at y=1.2 now hits the rectangle (height [-1.5, 1.5])
     ray_off = mi.Ray3f(o=[0, 1.2, -3], d=[0, 0, 1], time=5.0)
     assert dr.all(scene.ray_intersect(ray_off).is_valid())
 

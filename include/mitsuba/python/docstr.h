@@ -638,7 +638,55 @@ Args:
 
 static const char *__doc_mitsuba_AdjointIntegrator_traverse_cb = R"doc()doc";
 
-static const char *__doc_mitsuba_AnimatedTransform = R"doc()doc";
+static const char *__doc_mitsuba_AnimatedTransform =
+R"doc(Animated transformation
+
+This class stores a sequence of transformations and interpolates between them
+using a combination of linear interpolation (for translation and scaling) and
+spherical linear interpolation (for rotation).
+
+Internally, keyframes are packed into a flat buffer with a stride of
+``KeyframeStride`` floats per keyframe to optimize vectorized loads. Each
+keyframe has the following layout.
+
+``[time, scale.x, scale.y, scale.z, quat.x, quat.y, quat.z, quat.w,
+trans.x, trans.y, trans.z, unused]``
+
+This representation cannot express shear. Transformations with more than one
+keyframe must therefore be free of shear. Constant (single-keyframe)
+transformations are exempt, since they are evaluated as a plain matrix.
+
+The device buffer ``m_data`` supplies `eval`, while the host-side list
+``m_keyframes`` supplies `eval_scalar` and ``keyframes()``. Constructors
+and `Object.parameters_changed` keep them synchronized.
+
+`traverse` exposes four tensor views into ``m_data``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Component
+     - Shape
+     - Contents
+   * - ``times``
+     - ``(N,)``
+     - Keyframe times
+   * - ``scale``
+     - ``(N, 3)``
+     - Per-axis scale factors
+   * - ``rotation``
+     - ``(N, 4)``
+     - Rotation quaternions in ``(x, y, z, w)`` order
+   * - ``translation``
+     - ``(N, 3)``
+     - Translations
+
+The tensors share one buffer and must agree on ``N``, so changing the
+number of keyframes requires updating all four together.
+
+A single-keyframe transformation also exposes a 4x4 matrix under its
+parent's parameter name (e.g. ``"to_world"``). Evaluation uses this matrix,
+which takes precedence when written alongside the component views.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_2 = R"doc()doc";
 
@@ -656,7 +704,7 @@ static const char *__doc_mitsuba_AnimatedTransform_AnimatedTransform_2 = R"doc(I
 
 static const char *__doc_mitsuba_AnimatedTransform_AnimatedTransform_3 = R"doc(Initialize from a vector of time values and keyframes)doc";
 
-static const char *__doc_mitsuba_AnimatedTransform_Keyframe = R"doc(Helper struct to store individual, decomposed key frames.)doc";
+static const char *__doc_mitsuba_AnimatedTransform_Keyframe = R"doc(Decomposed scale, rotation, and translation of a keyframe.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_Keyframe_Q = R"doc()doc";
 
@@ -675,55 +723,48 @@ current contents of ``m_data``)doc";
 static const char *__doc_mitsuba_AnimatedTransform_class_name = R"doc()doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_ensure_uniform_keyframes =
-R"doc(Checks if all keyframes are uniformly spaced in time. Raises an
-exception if this is not the case.)doc";
+R"doc(Raise an exception if the keyframes are not uniformly spaced in time.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_eval =
 R"doc(Evaluate the transformation at a specific time
 
-This method performs a vectorized interpolation between keyframes,
-reading from the packed device buffer. Times outside of
-``get_time_bounds()`` are clamped to the first/last keyframe.)doc";
+Interpolate keyframes from the device buffer. Times outside the range
+returned by `get_time_bounds` are clamped to the first or last keyframe.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_eval_scalar =
 R"doc(Scalar evaluation of the transformation
 
-This version is for use on the host (e.g., during AABB construction) and
-reads the host-side keyframe list rather than the device buffer.)doc";
+Version of `eval` that reads the host-side keyframe list.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_get_spatial_bounds =
-R"doc(Evaluates the spatial bounds of the animated transform over the given
-bounding box. This is used to compute the AABB of animated objects.
-Note: This is an approximation computed by sampling the transformation
-at regular intervals. It may not be perfectly conservative for highly
-non-linear motion.)doc";
+R"doc(Approximate the swept bounds of ``bbox`` by sampling the transformation
+at regular intervals and at every keyframe. These bounds may not be
+conservative for nonlinear motion.)doc";
 
-static const char *__doc_mitsuba_AnimatedTransform_get_time_bounds = R"doc(Returns the time bounds of the animated transform.)doc";
+static const char *__doc_mitsuba_AnimatedTransform_get_time_bounds = R"doc(Return the time bounds of the animated transform.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_get_translation_bounds =
-R"doc(Returns the bounding box of the translation component of the animated
+R"doc(Return the bounding box of the translation component of the animated
 transform.)doc";
 
-static const char *__doc_mitsuba_AnimatedTransform_has_scale = R"doc(Checks if any keyframe has a scale component different from 1.)doc";
+static const char *__doc_mitsuba_AnimatedTransform_has_scale = R"doc(Check if any keyframe has a scale component different from 1.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_has_shear =
-R"doc(Checks if the transformation contains a shear component. This is only
-ever the case for constant (single-keyframe) transformations, which are
-evaluated as a plain matrix.)doc";
+R"doc(Check for shear, which is only supported by single-keyframe transforms.)doc";
 
-static const char *__doc_mitsuba_AnimatedTransform_initialize = R"doc(One-time initialization call that is used by constructors.)doc";
+static const char *__doc_mitsuba_AnimatedTransform_initialize = R"doc(Initialize keyframe storage and validate the animation.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_is_animated = R"doc(Check if the transformation is animated)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_keyframe_count = R"doc(Returns the number of key frames.)doc";
 
-static const char *__doc_mitsuba_AnimatedTransform_keyframes = R"doc(Returns the host-side keyframes of the animated transform.)doc";
+static const char *__doc_mitsuba_AnimatedTransform_keyframes = R"doc(Return the host-side keyframes of the animated transform.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_m_data = R"doc()doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_m_has_shear =
 R"doc(Set when a keyframe transformation contained shear, which the
-decomposition above cannot represent (see ``has_shear()``))doc";
+decomposition above cannot represent (see `has_shear`))doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_m_keyframes = R"doc()doc";
 
@@ -738,8 +779,8 @@ static const char *__doc_mitsuba_AnimatedTransform_m_transform = R"doc()doc";
 static const char *__doc_mitsuba_AnimatedTransform_m_translation = R"doc(Writable views into ``m_data``, see the class documentation)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_make_transform_opaque =
-R"doc(Promote the single-keyframe matrix to an opaque JIT variable. This is
-used to prevent baking of static transforms into JIT kernels.)doc";
+R"doc(Make the single-keyframe matrix opaque to prevent its values from being
+baked into JIT kernels.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_operator_eq = R"doc(Equality comparison operator)doc";
 
@@ -754,9 +795,8 @@ agree on the number of keyframes)doc";
 static const char *__doc_mitsuba_AnimatedTransform_parameters_changed = R"doc()doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_parameters_grad_enabled =
-R"doc(Checks if JIT AD gradients are enabled on the parameter that is actually
-evaluated: the static transform when there is a single keyframe, and the
-packed keyframe buffer otherwise.)doc";
+R"doc(Check whether gradients are enabled on the evaluated representation,
+either the single-keyframe matrix or the packed keyframe buffer.)doc";
 
 static const char *__doc_mitsuba_AnimatedTransform_to_string = R"doc()doc";
 
@@ -4101,16 +4141,15 @@ static const char *__doc_mitsuba_Endpoint_traverse_cb = R"doc()doc";
 
 static const char *__doc_mitsuba_Endpoint_traverse_cb_fields = R"doc()doc";
 
-static const char *__doc_mitsuba_Endpoint_animated_world_transform = R"doc(Return the underlying animated transformation)doc";
+static const char *__doc_mitsuba_Endpoint_animated_world_transform = R"doc(Return the underlying `AnimatedTransform4f`)doc";
 
-static const char *__doc_mitsuba_Endpoint_world_transform = R"doc(Return the local space to world space transformation)doc";
+static const char *__doc_mitsuba_Endpoint_world_transform = R"doc(Return the local-to-world transformation at ``time``)doc";
 
 static const char *__doc_mitsuba_Endpoint_world_transform_scalar =
-R"doc(\brief Return the local space to world space transformation as a
-scalar transform
+R"doc(Return the scalar local-to-world transformation at ``time``
 
-This mirrors `world_transform()` without touching the device: reading
-the JIT representation back would wait for all queued work.)doc";
+This mirrors `world_transform` using host-side data, avoiding a wait
+for queued device work.)doc";
 
 static const char *__doc_mitsuba_FileResolver =
 R"doc(Simple class for resolving paths on Linux/Windows/Mac OS
@@ -9487,9 +9526,8 @@ Returns:
     should be queried to check if an intersection was actually found.)doc";
 
 static const char *__doc_mitsuba_Scene_compute_surface_interaction_instanced =
-R"doc(Instancing-aware expansion of a preliminary intersection (see
-``compute_surface_interaction()``, which forwards here when the
-record may reference instanced geometry))doc";
+R"doc(Expand a preliminary intersection that may reference an instance.
+Called by `compute_surface_interaction`.)doc";
 
 static const char *__doc_mitsuba_Scene_emitters = R"doc(Return the list of emitters)doc";
 
@@ -10522,8 +10560,7 @@ static const char *__doc_mitsuba_Shape_Shape = R"doc()doc";
 static const char *__doc_mitsuba_Shape_Shape_2 = R"doc()doc";
 
 static const char *__doc_mitsuba_Shape_animated_to_world =
-R"doc(Return the underlying (possibly animated) object-to-world
-transformation)doc";
+R"doc(Return the object-to-world `AnimatedTransform4f`)doc";
 
 static const char *__doc_mitsuba_Shape_add_texture_attribute =
 R"doc(Add a texture attribute with the given ``name``.
@@ -11061,9 +11098,9 @@ static const char *__doc_mitsuba_Shape_texture_attribute = R"doc(Return the text
 
 static const char *__doc_mitsuba_Shape_texture_attribute_2 = R"doc(Return the texture attribute associated with ``name``.)doc";
 
-static const char *__doc_mitsuba_Shape_to_world = R"doc(Return the object-to-world transformation)doc";
+static const char *__doc_mitsuba_Shape_to_world = R"doc(Return the object-to-world transformation at ``time``)doc";
 
-static const char *__doc_mitsuba_Shape_to_world_scalar = R"doc(Return the object-to-world transformation (scalar form))doc";
+static const char *__doc_mitsuba_Shape_to_world_scalar = R"doc(Return the scalar object-to-world transformation at ``time``)doc";
 
 static const char *__doc_mitsuba_Shape_traverse = R"doc()doc";
 
@@ -14212,7 +14249,7 @@ static const char *__doc_mitsuba_pair_hasher = R"doc()doc";
 
 static const char *__doc_mitsuba_pair_hasher_operator_call = R"doc()doc";
 
-static const char *__doc_mitsuba_parse_animated_transform = R"doc(Helper function to parse an AnimatedTransform from Properties.)doc";
+static const char *__doc_mitsuba_parse_animated_transform = R"doc(Parse an `AnimatedTransform4f` from `Properties`.)doc";
 
 static const char *__doc_mitsuba_parse_fov = R"doc(Helper function to parse the field of view field of a camera)doc";
 
@@ -15444,8 +15481,8 @@ R"doc(Decompose an affine 4x4 matrix into scale (S), shear (H), rotation
 quaternion (Q), and translation (T)
 
 The result satisfies ``M = T * R(Q) * U(S, H)``, where ``U`` is the upper
-triangular matrix ``[[sx, hxy, hxz], [0, sy, hyz], [0, 0, sz]]``. This is
-the component form expected by Embree, OptiX and Metal.
+triangular matrix ``[[sx, hxy, hxz], [0, sy, hyz], [0, 0, sz]]``. This is the
+component form expected by Embree, OptiX and Metal.
 
 For transforms without shear, this uses Dr.Jit's polar decomposition. It
 otherwise falls back to an upper-triangular QR decomposition.)doc";

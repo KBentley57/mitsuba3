@@ -218,11 +218,10 @@ public:
     MI_IMPORT_TYPES(Scene, Texture)
 
     SunskyEmitter(const Properties &props) : Base(props) {
-        if (m_to_world->is_animated()) {
-          Throw("Animating the to_world matrix of a sunsky emitter is not "
-                "supported. Please use the timed_sunsky emitter for "
-                "temporal control.");
-        }
+        if (m_to_world->is_animated())
+            Throw("Animating the to_world matrix of a sunsky emitter is not "
+                  "supported. Please use the timed_sunsky emitter for "
+                  "temporal control.");
 
         if (props.has_property("sun_direction")) {
             if (props.has_property("latitude") || props.has_property("longitude")

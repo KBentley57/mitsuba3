@@ -371,7 +371,7 @@ def test22_clamping_outside_time_range_vec(variants_vec_backends_once):
 
 
 def test23_large_rotation_hemisphere(variant_scalar_rgb):
-    # A >180 degree step between keyframes: the constructor flips the second
+    # For a step greater than 180 degrees, the constructor flips the second
     # quaternion so that slerp takes the short path consistently.
     at = mi.AnimatedTransform4f({
         0.0: mi.ScalarAffineTransform4f.rotate([0, 0, 1], 0),
@@ -442,7 +442,7 @@ def test28_grad_enabled(variants_all_ad_rgb):
     animated = make_translation_anim([0.0, 1.0], [[0, 0, 0], [1, 0, 0]])
     assert not animated.parameters_grad_enabled()
 
-    # Gradients enter through a write: enabling them on a view attaches the
+    # Gradients enter through a write. Enabling them on a view attaches the
     # packed buffer once the view is folded back in by parameters_changed()
     params = mi.traverse(animated)
     translation = mi.TensorXf(params['translation'])

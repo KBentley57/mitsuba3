@@ -582,8 +582,8 @@ static void parse_transform_node(const ParserState &state, pugi::xml_node node,
     }
 }
 
-/// Reads the `time_<i>` / `transform_<i>` property pairs written by the
-/// <animation> parser back out of `props`, in keyframe order.
+/// Read the ``time_<i>`` and ``transform_<i>`` pairs from ``props`` in keyframe
+/// order, as stored by the ``<animation>`` parser.
 static std::vector<std::pair<double, ScalarAffineTransform4d>>
 extract_animation_keyframes(Properties &props) {
     std::vector<std::pair<double, ScalarAffineTransform4d>> keyframes;
@@ -600,7 +600,7 @@ extract_animation_keyframes(Properties &props) {
     return keyframes;
 }
 
-/// Instantiates an animated transform given Float/Spectrum types.
+/// Instantiate an animated transform for the given variant.
 template <typename Float, typename Spectrum>
 static ref<Object> instantiate_animated_transform(
     const std::vector<std::pair<double, ScalarAffineTransform4d>> &keyframes) {
@@ -608,14 +608,13 @@ static ref<Object> instantiate_animated_transform(
     using ScalarAffineTransform4f = AffineTransform<Point<ScalarFloat, 4>>;
     std::vector<std::pair<ScalarFloat, ScalarAffineTransform4f>> kf;
     kf.reserve(keyframes.size());
-    for (const auto &[time, trafo] : keyframes) {
+    for (const auto &[time, trafo] : keyframes)
         kf.push_back({ ScalarFloat(time), ScalarAffineTransform4f(trafo) });
-    }
     return new AnimatedTransform<Float, Spectrum>(kf);
 }
 
-/// Append `scene_node` to `state`, register its ID and, unless it is the root,
-/// link it into its parent under `property_name`. Returns its node index.
+/// Append ``scene_node`` to ``state`` and register its ID. If requested,
+/// link it to its parent under ``property_name``. Return its node index.
 static size_t register_node(ParserState &state, SceneNode &scene_node,
                             size_t parent_idx, std::string_view property_name,
                             bool link_to_parent) {
@@ -2073,7 +2072,7 @@ static bool decompose_transform(const ScalarAffineTransform4d &transform,
     return has_transform;
 }
 
-/// True if `transform` is (numerically) the identity.
+/// Check whether ``transform`` is the identity within numerical tolerance.
 static bool is_identity_transform(const ScalarAffineTransform4d &transform) {
     using Array = dr::array_t<ScalarMatrix4d>;
     const double eps = 1e-6;
@@ -2081,9 +2080,9 @@ static bool is_identity_transform(const ScalarAffineTransform4d &transform) {
         dr::abs(Array(transform.matrix - dr::identity<ScalarMatrix4d>())) > eps);
 }
 
-/// Write `transform` into `node` as canonical <translate>/<rotate>/<scale>
-/// operations, falling back to a raw <matrix> when it cannot be decomposed
-/// (shear, NaN). The identity emits nothing, which parses back to the identity.
+/// Write ``transform`` into ``node`` as ``<translate>``, ``<rotate>``, and
+/// ``<scale>`` operations. Use ``<matrix>`` when decomposition fails, and
+/// omit identity transforms.
 static void write_transform_ops(const ScalarAffineTransform4d &transform,
                                 pugi::xml_node &node, bool is_sensor = false) {
     if (is_identity_transform(transform) ||

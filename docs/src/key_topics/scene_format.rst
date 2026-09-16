@@ -370,13 +370,6 @@ replaces the ``<transform>`` tag with an ``<animation>`` tag, which contains one
 An ``<animation>`` may carry an ``id`` so that several objects can share one set
 of keyframes via ``<ref>``.
 
-Note that an animated transformation alone does not produce motion blur: the
-sensor's ``shutter_open`` and ``shutter_close`` parameters have to be set as
-well, since rays are otherwise all traced at time 0. See
-:ref:`sec-animation` for the shutter interval, which objects can be animated,
-how the keyframes are interpolated, and the differences between the ray tracing
-backends.
-
 References
 ----------
 

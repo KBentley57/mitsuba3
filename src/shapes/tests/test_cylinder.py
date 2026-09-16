@@ -29,7 +29,7 @@ def test01_create(variant_scalar_rgb):
         "to_world" : rot @ T().translate([1, -1, -1]) @ T().rotate([1.0, 0.0, 0.0], -45) @ T().scale([0.5, 0.5, dr.sqrt(8)])
     })
 
-    # Compare numerically rather than via ``str()``: both transforms are
+    # Compare numerically rather than via ``str()`` because both transforms are
     # mathematically identical but are assembled in a different order, which
     # perturbs the last digits of the printed keyframe decomposition.
     assert dr.allclose(s1.to_world().matrix, s2.to_world().matrix, atol=1e-6)

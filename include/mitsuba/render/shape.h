@@ -804,16 +804,16 @@ public:
     /// Is this shape an instance?
     bool is_instance() const { return shape_type() == +ShapeType::Instance; };
 
-    /// Return the object-to-world transformation at time \c time
+    /// Return the object-to-world transformation at ``time``
     AffineTransform4f to_world(Float time = 0.f) const { return m_to_world->eval(time); }
 
-    /// Return the object-to-world transformation (scalar form) at time \c time
+    /// Return the scalar object-to-world transformation at ``time``
     ScalarAffineTransform4f to_world_scalar(ScalarFloat time = 0.f) const { return m_to_world->eval_scalar(time); }
 
-    /// Return the underlying (possibly animated) object-to-world transformation
+    /// Return the object-to-world `AnimatedTransform4f`
     const AnimatedTransform4f *animated_to_world() const { return m_to_world.get(); }
 
-    /// Return the underlying (possibly animated) object-to-world transformation
+    /// Return the object-to-world `AnimatedTransform4f`
     AnimatedTransform4f *animated_to_world() { return m_to_world.get(); }
 
     /// Does the surface of this shape mark a medium transition?

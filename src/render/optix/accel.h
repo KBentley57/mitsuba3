@@ -110,11 +110,10 @@ build_gas(const OptixDeviceContext &context,
           MiOptixAccelData &out_accel,
           bool compact);
 
-/// Fills the `OptixInstance` array (one per `SceneIR::instances` entry)
-/// into ``out`` (sized ``sd.instances.size()``). ``blas_handle`` and
-/// ``blas_sbt_offset`` are indexed by global BLAS index: the GAS traversable
-/// and the SBT base offset of each BLAS. The per-instance face-cull flag
-/// derives from the referenced BLAS's `ShapeIR::Kind`.
+/// Fill ``out`` with one ``OptixInstance`` per entry in ``sd.instances``.
+/// ``blas_handle`` and ``blas_sbt_offset`` provide each BLAS's GAS traversable
+/// and SBT base offset, indexed by global BLAS index. The face-culling flag
+/// follows the referenced BLAS's ``ShapeIR::Kind``.
 ///
 /// Instances with more than one keyframe are inserted behind an
 /// ``OptixSRTMotionTransform`` traversable (built with ``context``) so that

@@ -375,7 +375,7 @@ void prepare_ias(const SceneIR &sd,
         uint32_t instance_id = inst.instance_index;
 
         if (inst.keyframes.size() > 1) {
-            // Animated instance: wrap the BLAS in an SRT motion-transform
+            // For an animated instance, wrap the BLAS in an SRT motion-transform
             // traversable so intersections interpolate the instance-to-world
             // transform across time. The IAS then references that traversable
             // through an identity instance transform.

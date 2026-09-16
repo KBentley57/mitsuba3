@@ -809,21 +809,20 @@ protected:
     /// entries per keyframe.
     static constexpr uint32_t MaxInstanceKeyframes = 0xFFFFFFFFu / KeyframeStride;
 
-    /// Per-instance animated keyframe data, populated only when at least one
-    /// instance has an animated ``to_world``. Concatenated ``KeyframeStride``
-    /// chunks written by ``pack_keyframe()``, i.e. AnimatedTransform's own
-    /// storage layout.
+    /// Packed instance keyframes, populated when any instance is animated.
+    /// Each keyframe occupies ``KeyframeStride`` floats in the layout used
+    /// by `AnimatedTransform4f` and written by ``pack_keyframe()``.
     DynamicBuffer<Float> m_instance_kf_data;
 
     /// Locates the keyframes of each instance within ``m_instance_kf_data``
-    /// and describes their uniform time grid. Four entries per instance:
+    /// and describes their uniform time grid. Each instance has four entries.
     ///
     /// ``[t_min, 1 / t_step, base, k_max]``
     ///
     /// where ``base`` is the index of the instance's first keyframe and
     /// ``k_max`` its keyframe count minus one (0 = static). The two indices
     /// share the floating point buffer with the time grid so that a single
-    /// packet load retrieves the entire record; they are stored as raw bit
+    /// packet load retrieves the entire record. They are stored as raw bit
     /// patterns (``dr::reinterpret_array``) rather than converted values,
     /// which keeps the full integer range available.
     DynamicBuffer<Float> m_instance_kf_meta;
@@ -831,17 +830,16 @@ protected:
     /// Number of instances with a static ``to_world``.
     size_t m_static_instance_count = 0;
 
-    /// Instancing-aware expansion of a preliminary intersection (see
-    /// ``compute_surface_interaction()``, which forwards here when the
-    /// record may reference instanced geometry)
+    /// Expand a preliminary intersection that may reference an instance.
+    /// Called by `compute_surface_interaction`.
     SurfaceInteraction3f compute_surface_interaction_instanced(
         const Ray3f &ray, const PreliminaryIntersection3f &pi,
         uint32_t ray_flags, Mask active) const;
 
-    /// Evaluate instance ``i0`` (0-based) ``to_world`` at ``time``. Animated
-    /// instances interpolate their keyframes (matching the Embree/OptiX SRT
-    /// motion accel); static instances fall back to the differentiable matrix
-    /// in ``m_instance_transforms``.
+    /// Evaluate the transform of instance ``i0`` at ``time``. Animated
+    /// instances interpolate keyframes using the active backend's rotation
+    /// interpolation. Static instances use the differentiable matrix in
+    /// ``m_instance_transforms``.
     AffineTransform4f eval_instance_to_world(const UInt32 &i0, const Float &time,
                                              Mask active) const;
 
