@@ -167,3 +167,26 @@ and interactive SGX editor workflows were not validated in this follow-up.
 Keep MI_SPLIT_MODE=OFF with the current SupportPackages recipe. Distribution
 3.10.0.1 and its tag remain unchanged; this revision includes the companion
 export patch previously recorded in SGX's integration notes.
+
+## Distribution 3.10.0.3: module-environment build fixes
+
+Python stub generation now prepends the matching build-tree library directory
+on Linux. This prevents an older module-loaded Dr.Jit runtime from overriding
+the new extension's RUNPATH and causing an undefined jit_kernel_history_free
+symbol. The bundled nanobind CMake helper accepts explicit ENVIRONMENT settings
+for stub commands; both Dr.Jit and Mitsuba supply the build-library override.
+Dr.Jit's failed-import diagnostic also locates the extension without referencing
+an uninitialized module variable, preserving the original ImportError.
+
+These exact fixes completed the SupportPackages Mitsuba build with all 15
+configured scalar/LLVM/CUDA variants, including both stub-generation stages,
+under the SGX SupportPackages and GCC 14 modules. A deliberate old-runtime
+import verified that the original missing-symbol diagnostic remains visible.
+CUDA compilation does not constitute GPU runtime validation. The renderer and
+SGX test suites were not rerun for this build-only follow-up.
+
+The existing SupportPackages build cache still pointed to IMAGEK dependencies,
+Python, and install prefix; no installation was performed. Loading another
+module does not reset cached CMake paths. Correct the parent SupportPackages
+configuration and dependency cache before installing this release for SGX.
+These packaging fixes do not change an existing build's install destination.

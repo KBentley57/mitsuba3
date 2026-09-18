@@ -219,6 +219,13 @@ set(STUB_ARGS
   DEPENDS ${MI_STUB_DEPENDS}
 )
 
+# Module-loaded SDKs can put an older runtime ahead of the build RUNPATH.
+# Stub generation must import extensions with this build's matching libraries.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  list(APPEND STUB_ARGS ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:mitsuba>:$ENV{LD_LIBRARY_PATH}")
+endif()
+
 # The sanitizers require preloading shared libraries into Python, and that
 # doesn't play well with stub generation. Disable stubs if sanitizers are
 # enabled.
