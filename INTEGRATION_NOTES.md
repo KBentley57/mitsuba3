@@ -190,3 +190,21 @@ Python, and install prefix; no installation was performed. Loading another
 module does not reset cached CMake paths. Correct the parent SupportPackages
 configuration and dependency cache before installing this release for SGX.
 These packaging fixes do not change an existing build's install destination.
+
+## Distribution 3.10.0.4: ordered Python stub generation
+
+Mitsuba's stub-generation commands now form an explicit dependency chain.
+Parallel stub imports reproduced process aborts, while the same commands passed
+individually. Ordering the imports avoids those concurrent initializations;
+C++ compilation and unrelated build steps remain parallel. All existing module,
+variant, and Python-source dependencies are retained.
+
+All 21 Mitsuba stub generators passed when invoked with Ninja -j40 after this
+change. The full 15-variant SupportPackages build then completed successfully.
+On September 21 the user also confirmed a successful rebuild after correcting
+the install prefix; the current nested cache selects /data1/SP_INSTALL/SGX/release.
+The renderer and SGX test suites were not rerun for this CMake-only follow-up.
+
+This distribution retains the 3.10.0.3 runtime-library selection and import-error
+fixes, all previous custom work, and all dependency revisions. Earlier archives
+remain unchanged. Source-only release updates do not reset existing CMake caches.

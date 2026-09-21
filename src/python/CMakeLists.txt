@@ -216,7 +216,6 @@ endif()
 set(STUB_ARGS
   PYTHON_PATH ${MI_BINARY_DIR}/python
   PATTERN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/stubs.pat
-  DEPENDS ${MI_STUB_DEPENDS}
 )
 
 # Module-loaded SDKs can put an older runtime ahead of the build RUNPATH.
@@ -246,6 +245,7 @@ if (NOT (MI_SANITIZE_ADDRESS OR MI_SANITIZE_MEMORY))
     MODULE mitsuba
     OUTPUT ${MI_BINARY_DIR}/python/mitsuba/_stubs.pyi
     MARKER_FILE ${MI_BINARY_DIR}/python/mitsuba/py.typed
+    DEPENDS ${MI_STUB_DEPENDS}
     ${STUB_ARGS}
   )
 
@@ -262,14 +262,20 @@ if (NOT (MI_SANITIZE_ADDRESS OR MI_SANITIZE_MEMORY))
     ${MI_BINARY_DIR}/python/mitsuba/__init__.pyi
     ${MI_BINARY_DIR}/python/mitsuba/py.typed)
 
+  # Each stub imports the renderer and initializes its runtime. Concurrent
+  # imports can abort under build-time resource pressure. Order these commands
+  # explicitly while leaving compilation and unrelated build steps parallel.
+  set(MI_PREVIOUS_STUB_TARGET mitsuba-stub)
   foreach (value ${MI_STUB_SUBMODULES})
     string(REPLACE "." "/" value_path ${value})
     nanobind_add_stub(
       mitsuba-stub-${value}
       MODULE mitsuba.${value}
       OUTPUT ${MI_BINARY_DIR}/python/mitsuba/_${value_path}_stubs.pyi
+      DEPENDS ${MI_STUB_DEPENDS} ${MI_PREVIOUS_STUB_TARGET}
       ${STUB_ARGS}
     )
+    set(MI_PREVIOUS_STUB_TARGET mitsuba-stub-${value})
 
     add_custom_command(
       OUTPUT ${MI_BINARY_DIR}/python/mitsuba/${value_path}.pyi
